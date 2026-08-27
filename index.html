@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>How Attention Actually Got Here</title>
+<meta name="description" content="A chronological, source-checked tour of every major attention mechanism — from scaled dot-product attention in 2017 to DroPE in 2025 — ordered by real launch date, not teaching order." />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="rail">
+    <div class="rail-title">Timeline</div>
+    <ul class="rail-list"></ul>
+  </nav>
+
+  <main class="main">
+    <header class="hero">
+      <div class="eyebrow">A chronological tour of attention, 2017 → 2026</div>
+      <h1>How attention actually got here</h1>
+      <p>
+        Every mechanism below is real, dated, and sourced — check the link at the top of each
+        section if you don't believe a date. They're ordered by when they actually shipped,
+        not by how a textbook would group them. Read it top to bottom and you'll see the field's
+        actual priorities shift over time: first make attention work at all, then make decoding
+        cheaper, then fix position, then make context longer, then bring recurrent state and
+        sparsity back for the parts exact attention can no longer afford.
+      </p>
+    </header>
+
+    <!-- ============ BASELINE: STANDARD ATTENTION ============ -->
+    <section class="mech" id="standard-attention" data-date="Jun 2017" data-short="Standard attention">
+      <div class="mech-meta"><span class="mech-order">baseline</span><span class="mech-date">Jun 2017</span></div>
+      <h2>Scaled dot-product attention</h2>
+      <p class="mech-source">Vaswani, Shazeer, Parmar, Uszkoreit, Jones, Gomez, Kaiser, Polosukhin — <a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">Attention Is All You Need</a>, arXiv:1706.03762 (Google Brain / Google Research / U. Toronto)</p>
+
+      <div class="mech-body">
+        <p>Before this, a token's vector never learned anything about the other tokens around it.
+        Every mechanism on this page is either <em>this</em>, or a response to a cost <em>this</em>
+        introduced.</p>
+        <p>Each token makes three projections of itself: a <strong>query</strong> ("what am I
+        looking for?"), a <strong>key</strong> ("what do I contain?"), and a <strong>value</strong>
+        ("what do I give you if you pick me?"). A token's query is compared against every other
+        token's key with a dot product, the scores are scaled by <code>1/√d_k</code> so they don't
+        blow up, a causal mask zeroes out anything in the future, softmax turns what's left into
+        weights that sum to 1, and those weights combine the values into one output vector.</p>
+      </div>
+
+      <div class="widget" id="w-qkv">
+        <div class="widget-title">Interactive — step through a 6-token sequence</div>
+        <canvas data-h="230"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>query token</label><input type="range" class="qkv-query" min="0" max="5" step="1" value="2"><span class="val qkv-query-out"></span></div>
+          <button class="toggle qkv-mask"></button>
+        </div>
+        <div class="widget-readout">Turn the mask off — attention weight immediately moves onto tokens that haven't happened yet. That's exactly the problem the causal mask exists to solve.</div>
+      </div>
+
+      <div class="callout"><strong>Two bills this sends:</strong> compute grows roughly as T² (every token compares with every other token), and generation needs a growing KV cache — one saved key and value per earlier token, for every active conversation. Everything from here on is field working on one or both of those bills.</div>
+    </section>
+
+    <!-- 1. SINUSOIDAL PE -->
+    <section class="mech" id="sinusoidal-pe" data-date="Jun 2017" data-short="Sinusoidal PE">
+      <div class="mech-meta"><span class="mech-order">01</span><span class="mech-date">Jun 2017</span></div>
+      <h2>Sinusoidal positional encoding</h2>
+      <p class="mech-source">Same paper as above — <a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">Attention Is All You Need</a>, arXiv:1706.03762</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>Self-attention is permutation-invariant — swap two tokens and the set of query/key/value comparisons doesn't change. Unlike an RNN, nothing in the mechanism itself knows which token came first.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>A fixed function <code>PE(pos, 2i) = sin(pos / 10000^(2i/d))</code>, <code>PE(pos, 2i+1) = cos(...)</code> is added to each token's embedding before the first layer — different positions get different, deterministic patterns.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>A fixed, non-learned function — no adaptivity to the data, and despite the paper's hope that it would let the model "extrapolate to sequence lengths longer than the ones encountered during training," it empirically extrapolates poorly beyond the trained length.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Rarely chosen fresh today — but it's the reason later methods (RoPE especially) still think in terms of sinusoidal frequencies.</p></div>
+      </div>
+    </section>
+
+    <!-- 2. LEARNED PE -->
+    <section class="mech" id="learned-pe" data-date="Jun 2018" data-short="Learned PE">
+      <div class="mech-meta"><span class="mech-order">02</span><span class="mech-date">Jun 2018</span></div>
+      <h2>Absolute learned positional embeddings</h2>
+      <p class="mech-source">Radford, Narasimhan, Salimans, Sutskever (OpenAI) — <a href="https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf" target="_blank" rel="noopener">Improving Language Understanding by Generative Pre-Training</a> (GPT-1). Adopted a few months later by BERT (Devlin et al., <a href="https://arxiv.org/abs/1810.04805" target="_blank" rel="noopener">arXiv:1810.04805</a>, Oct 2018). Footnote: a learned position-embedding table appears even earlier, in a non-attention architecture — Gehring et al., <a href="https://arxiv.org/abs/1705.03122" target="_blank" rel="noopener">Convolutional Sequence to Sequence Learning</a>, May 2017.</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>Sinusoidal encoding imposes a fixed geometric prior. What if the useful positional structure for a given task isn't a clean sine wave?</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Replace the fixed function with a trained embedding table indexed by absolute position — <code>max_position × d_model</code> — trained end-to-end alongside the token embeddings. The model learns whatever positional pattern is useful.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>A hard length ceiling. Position 4,097 in a table trained up to 4,096 simply doesn't exist — there's no function to fall back on, only an untrained (or missing) row.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>When your maximum sequence length is known and fixed in advance, and you want the model to be free to learn non-uniform positional structure rather than impose one.</p></div>
+      </div>
+      <div class="widget" id="w-pe">
+        <div class="widget-title">Interactive — a computable function vs. a trained table</div>
+        <canvas data-h="200"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>trained length</label><input type="range" class="pe-trained" min="4" max="16" step="1" value="8"><span class="val pe-trained-out"></span></div>
+          <button class="toggle pe-beyond"></button>
+        </div>
+        <div class="widget-readout">The sinusoidal curve keeps going past the trained region because it's a formula. The learned table simply has nothing there.</div>
+      </div>
+    </section>
+
+    <!-- 3. SPARSE TRANSFORMERS -->
+    <section class="mech" id="sparse-transformer" data-date="Apr 2019" data-short="Sparse Transformers">
+      <div class="mech-meta"><span class="mech-order">03</span><span class="mech-date">Apr 2019</span></div>
+      <h2>Sparse Transformers</h2>
+      <p class="mech-source">Child, Gray, Radford, Sutskever (OpenAI) — <a href="https://arxiv.org/abs/1904.10509" target="_blank" rel="noopener">Generating Long Sequences with Sparse Transformers</a>, arXiv:1904.10509</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>Full self-attention over sequences of tens of thousands of steps (raw audio, high-resolution images) was intractable — O(n²) memory and compute.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Factorize attention into two sparse patterns — <strong>strided</strong> (attend to every k-th earlier token) and <strong>local</strong> (attend to a nearby window) — whose union approximates full attention at O(n√n).</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>This is an approximation of full attention, not full attention. The sparsity patterns are hand-designed per data modality, and you typically need multiple heads/patterns to recover full-attention-level expressivity.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Very long, structurally regular sequences (images, audio) where a fixed geometric pattern is a reasonable prior for what should attend to what.</p></div>
+      </div>
+      <div class="widget" id="w-sparse">
+        <div class="widget-title">Interactive — strided vs. local vs. their union (16 tokens, causal)</div>
+        <canvas data-h="280"></canvas>
+        <div class="widget-controls">
+          <button class="toggle sp-mode" data-mode="full">full</button>
+          <button class="toggle sp-mode" data-mode="strided">strided</button>
+          <button class="toggle sp-mode" data-mode="local">local</button>
+          <button class="toggle sp-mode" data-mode="union">union</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. MQA -->
+    <section class="mech" id="mqa" data-date="Nov 2019" data-short="MQA">
+      <div class="mech-meta"><span class="mech-order">04</span><span class="mech-date">Nov 2019</span></div>
+      <h2>Multi-Query Attention (MQA)</h2>
+      <p class="mech-source">Shazeer (Google) — <a href="https://arxiv.org/abs/1911.02150" target="_blank" rel="noopener">Fast Transformer Decoding: One Write-Head is All You Need</a>, arXiv:1911.02150</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>During autoregressive decoding, every layer reloads its per-head K/V tensors from memory at every step. At generation time this is <em>memory-bandwidth</em> bound, not compute bound.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>All query heads keep their own projections, but share a <strong>single</strong> set of key/value projections. One K/V head instead of one per query head — far less to reload per step.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>The paper reports this directly: "minor quality degradation" relative to full multi-head attention. One shared K/V head is a real bottleneck on representational diversity.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Decoding-latency-critical serving where the quality gap is acceptable — or as the extreme end of the GQA dial (see below), rather than a standalone choice.</p></div>
+      </div>
+      <div class="widget" id="w-mqa">
+        <div class="widget-title">Interactive — 8 query heads, 1 shared key/value head</div>
+        <canvas data-h="220"></canvas>
+      </div>
+    </section>
+
+    <!-- 5. LONGFORMER -->
+    <section class="mech" id="longformer" data-date="Apr 2020" data-short="Sliding window (origin)">
+      <div class="mech-meta"><span class="mech-order">05</span><span class="mech-date">Apr 2020</span></div>
+      <h2>Sliding window attention — the origin: Longformer</h2>
+      <p class="mech-source">Beltagy, Peters, Cohan (Allen Institute for AI) — <a href="https://arxiv.org/abs/2004.05150" target="_blank" rel="noopener">Longformer: The Long-Document Transformer</a>, arXiv:2004.05150</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>Long-document tasks (classification, QA over full documents) need attention over thousands of tokens, but O(n²) full attention makes that expensive at encoder scale.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Each token attends only within a local, fixed-size window — linear rather than quadratic scaling — plus task-specific <strong>global attention</strong> on a handful of special tokens (like <code>[CLS]</code>) that stay visible to and from everything.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>A token outside the local window is invisible to a given layer directly; long-range dependencies have to propagate through several stacked layers instead of being read directly.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Encoder-style long-document tasks where a few designated tokens can carry the global summary role. This is the origin of the mechanism — the decoder/KV-cache framing below (Mistral, 2023) is a different, later application of the same idea.</p></div>
+      </div>
+      <div class="widget" id="w-longformer">
+        <div class="widget-title">Interactive — local window + global tokens (green)</div>
+        <canvas data-h="150"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>window size</label><input type="range" class="sw-window" min="1" max="6" step="1" value="3"><span class="val sw-window-out"></span></div>
+          <div class="ctrl"><label>selected token</label><input type="range" class="sw-pos" min="0" max="19" step="1" value="15"><span class="val sw-pos-out"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. LINEAR ATTENTION -->
+    <section class="mech" id="linear-attention" data-date="Jun 2020" data-short="Linear attention">
+      <div class="mech-meta"><span class="mech-order">06</span><span class="mech-date">Jun 2020</span></div>
+      <h2>Linear attention</h2>
+      <p class="mech-source">Katharopoulos, Vyas, Pappas, Fleuret (EPFL / Idiap) — <a href="https://arxiv.org/abs/2006.16236" target="_blank" rel="noopener">Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention</a>, arXiv:2006.16236, ICML 2020</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>Softmax ties every query's weights to the scores of every other key it's being compared against — you can't compute a key's contribution without knowing all the other keys. That ties the compute to O(T²) and rules out pre-summarizing the past.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Replace <code>softmax(QKᵀ)V</code> with a kernel feature map <code>φ(Q)φ(K)ᵀV</code>. Because matrix multiplication associates, this can be computed as a running sum — a fixed-size state <code>S = Σ φ(kⱼ)vⱼᵀ</code> updated one token at a time, exactly like an RNN hidden state. Sequence-length cost drops from O(T²) to O(T).</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>The kernel feature map only approximates true softmax similarity — an expressiveness trade. And the entire past is compressed into one fixed-size matrix: different memories can interfere with each other, and there's no way to go back and read an individual old token exactly.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Very long sequences where O(T²) softmax attention is the actual bottleneck and some recall loss is acceptable — or as a building block inside a hybrid schedule (see LightningLM at the end of this timeline).</p></div>
+      </div>
+      <div class="mech-body">
+        <p class="dim">The toy arithmetic below is the same one from Section 4 of the source lecture: <code>q·k₁v₁ + q·k₂v₂ + q·k₃v₃</code> can be regrouped as <code>q·(k₁v₁+k₂v₂+k₃v₃)</code> — a fixed state S computed before the query even arrives. Turn softmax on and watch the two routes stop agreeing, because softmax's shared denominator ties every weight to every other score.</p>
+      </div>
+      <div class="widget" id="w-linear">
+        <div class="widget-title">Interactive — direct route vs. regrouped fixed-state route</div>
+        <canvas data-h="230"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>query q</label><input type="range" class="sc-q" min="0.5" max="4" step="0.1" value="2"><span class="val sc-q-out"></span></div>
+          <button class="toggle sc-softmax"></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. DELTA RULE ORIGIN -->
+    <section class="mech" id="delta-rule-origin" data-date="Feb 2021" data-short="The delta rule">
+      <div class="mech-meta"><span class="mech-order">07</span><span class="mech-date">Feb 2021</span></div>
+      <h2>The delta rule (origin)</h2>
+      <p class="mech-source">Schlag, Irie, Schmidhuber (IDSIA / USI-SUPSI) — <a href="https://arxiv.org/abs/2102.11174" target="_blank" rel="noopener">Linear Transformers Are Secretly Fast Weight Programmers</a>, arXiv:2102.11174, ICML 2021</p>
+      <div class="callout"><strong>Correction worth flagging:</strong> the delta rule is often attributed to the 2024 "DeltaNet" paper. That paper (below, order 17) is a parallel-<em>training</em> algorithm for this exact recurrence — the mechanism itself is three years older.</div>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>Linear attention's write rule is purely additive: <code>S = S + kᵢvᵢᵀ</code>. Writing a new association never corrects an old one — it just piles on top, so old and new associations can interfere and corrupt each other inside the same fixed-size state.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Reframe the linear-attention state as a "fast weight" associative memory (echoing 1990s fast-weight-programmer nets), and replace the additive write with a delta-rule-style update: read what the memory currently returns for this key, compute the gap to what it should return, and write only that correction.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>The corrective recurrence is inherently sequential at this point — computed one step at a time, with no way (yet) to parallelize it across the sequence for fast GPU training. That gap is exactly what the 2024 DeltaNet paper solves.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>The right lens whenever "the model needs to overwrite/correct what it remembers," not just accumulate more of it — this is the conceptual seed for every delta-rule-based recurrent model that follows.</p></div>
+      </div>
+      <div class="widget" id="w-delta-origin">
+        <div class="widget-title">Interactive — read, compute the delta, write only the correction</div>
+        <canvas data-h="230"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>memory returns</label><input type="range" class="dr-current" min="0" max="100" step="1" value="40"><span class="val dr-current-out"></span></div>
+          <div class="ctrl"><label>wanted answer</label><input type="range" class="dr-wanted" min="0" max="100" step="1" value="55"><span class="val dr-wanted-out"></span></div>
+          <button class="toggle dr-naive"></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8. ROPE -->
+    <section class="mech" id="rope" data-date="Apr 2021" data-short="RoPE">
+      <div class="mech-meta"><span class="mech-order">08</span><span class="mech-date">Apr 2021</span></div>
+      <h2>RoPE — Rotary Position Embedding</h2>
+      <p class="mech-source">Su, Lu, Pan, Murtadha, Wen, Liu (Zhuiyi Technology) — <a href="https://arxiv.org/abs/2104.09864" target="_blank" rel="noopener">RoFormer: Enhanced Transformer with Rotary Position Embedding</a>, arXiv:2104.09864</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>Neither sinusoidal nor learned absolute PE puts position directly into the query-key comparison — and prior relative-position schemes (Shaw et al., T5's relative bias) required modifying the attention computation itself, adding real parameters and compute.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Rotate each query/key vector by an angle proportional to its position, applied as a pre-multiplication before the dot product. The rotations are multiplicative, so in the dot product the absolute rotations cancel and only the <em>difference</em> — the relative distance — survives: <code>R(iθ)q · R(jθ)k = q · R((j−i)θ)k</code>.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>The base frequency (10000) fixes how position resolution is spread across the head's dimensions. That fixed choice is exactly what later breaks down at very long context — motivating NTK-aware scaling and YaRN below.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>The default choice for almost any modern decoder-only LLM today — relative-position-aware, no extra learned parameters, and compatible with linear-attention variants.</p></div>
+      </div>
+      <div class="widget" id="w-rope">
+        <div class="widget-title">Interactive — rotate a key and a query, watch the relative angle</div>
+        <canvas data-h="220"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>key position</label><input type="range" class="rope-pos" min="0" max="10" step="1" value="2"><span class="val rope-pos-out"></span></div>
+          <div class="ctrl"><label>distance to query</label><input type="range" class="rope-dist" min="1" max="10" step="1" value="6"><span class="val rope-dist-out"></span></div>
+          <button class="toggle rope-toggle"></button>
+          <button class="toggle rope-shift">shift both +10</button>
+        </div>
+        <div class="widget-readout">Click "shift both +10" — the relative angle stays identical because it only depends on distance.</div>
+      </div>
+    </section>
+
+    <!-- 9. ALIBI -->
+    <section class="mech" id="alibi" data-date="Aug 2021" data-short="ALiBi">
+      <div class="mech-meta"><span class="mech-order">09</span><span class="mech-date">Aug 2021</span></div>
+      <h2>ALiBi</h2>
+      <p class="mech-source">Press, Smith, Lewis (UW / FAIR) — <a href="https://arxiv.org/abs/2108.12409" target="_blank" rel="noopener">Train Short, Test Long: Attention with Linear Biases Enables Input Length Extrapolation</a>, arXiv:2108.12409, ICLR 2022</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>Models trained with sinusoidal or even RoPE positions degrade sharply once evaluated on sequences noticeably longer than they were trained on — the "train short, test long" setting.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Don't add any position signal to the inputs at all. Instead, subtract a static, non-learned penalty <code>m · distance</code> directly from the pre-softmax attention score — a per-head slope <code>m</code>, geometrically spaced across heads. Closer tokens get less penalty; farther tokens get more.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>The penalty grows linearly with distance forever — a strong, fixed recency bias baked into the mechanism. Tasks that genuinely need to weight far-away evidence as heavily as nearby evidence fight against this bias.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Length extrapolation is the priority and a recency prior is acceptable or even desirable — the paper's own result: trained at 1024, evaluated at 2048, matching a sinusoidal model actually trained at 2048, while training 11% faster and using 11% less memory.</p></div>
+      </div>
+      <div class="callout">No dedicated widget here — contrast it directly against the RoPE widget above: RoPE encodes distance <em>inside</em> the query-key dot product and stays neutral about which distance is "better"; ALiBi <em>penalizes</em> distance directly in the score, on purpose.</div>
+    </section>
+
+    <!-- 10. GQA -->
+    <section class="mech" id="gqa" data-date="May 2023" data-short="GQA">
+      <div class="mech-meta"><span class="mech-order">10</span><span class="mech-date">May 2023</span></div>
+      <h2>Grouped-Query Attention (GQA)</h2>
+      <p class="mech-source">Ainslie, Lee-Thorp, de Jong, Zemlyanskiy, Lebrón, Sanghai (Google Research) — <a href="https://arxiv.org/abs/2305.13245" target="_blank" rel="noopener">GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints</a>, arXiv:2305.13245, EMNLP 2023</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>MQA's one-shared-head extreme saved the most memory but cost the most quality, and training a separate MQA model from scratch wasn't always practical.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>A tunable dial between MHA and MQA: split query heads into groups, each group sharing one K/V head. The paper also introduces "uptraining" — converting an existing MHA checkpoint into a GQA model using only about 5% of the original pretraining compute.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>Still a trade-off, not a free lunch — quality drops somewhat as the number of KV groups shrinks, in exchange for cache savings and decoding speed closer to MQA.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>The default today for most serving-oriented LLMs (Llama 2's larger sizes, Mistral, Falcon) — a strong practical baseline. But note what it doesn't fix: the cache still grows linearly with context length, just with a smaller slope.</p></div>
+      </div>
+      <div class="widget" id="w-gqa">
+        <div class="widget-title">Interactive — drag KV heads from 1 (MQA) to 8 (MHA)</div>
+        <canvas data-h="220"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>shared KV heads</label><input type="range" class="hs-kv" min="1" max="8" step="1" value="2"><span class="val hs-kv-out"></span></div>
+        </div>
+      </div>
+      <div class="callout">Try the KV-cache calculator further down this page — GQA lowers the slope of the cache-vs-context line, but the line still climbs.</div>
+    </section>
+
+    <!-- 11. POSITION INTERPOLATION (bonus) -->
+    <section class="mech" id="position-interpolation" data-date="Jun 2023" data-short="Position Interpolation (bonus)">
+      <div class="mech-meta"><span class="mech-order">11 · bonus</span><span class="mech-date">Jun 2023</span></div>
+      <h2>Position Interpolation</h2>
+      <p class="mech-source">Chen, Wong, Chen, Tian (Meta) — <a href="https://arxiv.org/abs/2306.15595" target="_blank" rel="noopener">Extending Context Window of Large Language Models via Positional Interpolation</a>, arXiv:2306.15595 — <em>not covered in the original lecture, added here because it's the direct predecessor to NTK-aware scaling and YaRN below and the timeline doesn't make sense without it.</em></p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>A RoPE model trained at, say, 4K tokens produces garbage rotation angles once you simply evaluate it at 32K positions — the model never saw those angles during training.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Instead of extrapolating to unseen positions, linearly <em>compress</em> every position index by the extension factor before computing the rotation — position 32,000 gets treated the way position 4,000 would have been. Every RoPE dimension is scaled by the same uniform factor.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>Uniform compression squeezes the high-frequency dimensions just as hard as the low-frequency ones — and high-frequency dimensions are what encode fine-grained local position. Compress those too much and nearby-token discrimination degrades.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Simple to implement and a real improvement over naive extrapolation — but superseded within days by the community's NTK-aware idea below, which compresses non-uniformly instead.</p></div>
+      </div>
+      <div class="widget" id="w-pi">
+        <div class="widget-title">Interactive — how much rotary resolution survives at each extension factor</div>
+        <canvas data-h="200"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>context extension</label><input type="range" class="rs-ext" min="1" max="8" step="1" value="4"><span class="val rs-ext-out"></span></div>
+        </div>
+        <div class="widget-readout">Position Interpolation compresses every dimension by the same amount — notice the flat line across all dimensions.</div>
+      </div>
+    </section>
+
+    <!-- 12. NTK-AWARE -->
+    <section class="mech" id="ntk-aware" data-date="~Jun 30, 2023" data-short="NTK-aware scaling">
+      <div class="mech-meta"><span class="mech-order">12</span><span class="mech-date">~Jun 30, 2023</span></div>
+      <h2>NTK-aware RoPE scaling</h2>
+      <p class="mech-source">u/bloc97, r/LocalLLaMA — <a href="https://www.reddit.com/r/LocalLLaMA/comments/14lz7j5/" target="_blank" rel="noopener">"NTK-Aware Scaled RoPE Allows LLaMA Models to Have Extended (8k+) Context Size Without Any Fine-Tuning and Minimal Perplexity Degradation"</a>. Not a peer-reviewed paper — a community post, with closely related independent work by kaiokendev the same month. The exact posting day is secondary-sourced (Reddit's own metadata wasn't directly fetchable); treat late June 2023 as approximate.</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>Position Interpolation's uniform compression damages high-frequency (fine local position) dimensions more than necessary.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Relate the problem to Neural Tangent Kernel theory and scale dimensions <em>non-uniformly</em>: compress the low-frequency (long-range) dimensions more, and leave the high-frequency (local) dimensions closer to untouched.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>Purely heuristic at the time — no formal error bound, no peer review, validated informally through perplexity numbers posted in the thread. Required manual tuning per model.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>A genuine improvement over linear interpolation with no fine-tuning required — but treat it as a community finding to build on, not a rigorously validated method on its own; that formalization is exactly what YaRN does next.</p></div>
+      </div>
+      <div class="widget" id="w-ntk">
+        <div class="widget-title">Interactive — same widget, locked to NTK-aware's non-uniform curve</div>
+        <canvas data-h="200"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>context extension</label><input type="range" class="rs-ext" min="1" max="8" step="1" value="4"><span class="val rs-ext-out"></span></div>
+        </div>
+        <div class="widget-readout">High-frequency (local) dimensions on the right stay closer to fully preserved; low-frequency (long-range) dimensions on the left absorb most of the compression.</div>
+      </div>
+    </section>
+
+    <!-- 13. YARN -->
+    <section class="mech" id="yarn" data-date="Aug 2023" data-short="YaRN">
+      <div class="mech-meta"><span class="mech-order">13</span><span class="mech-date">Aug 2023</span></div>
+      <h2>YaRN</h2>
+      <p class="mech-source">Peng, Quesnelle, Fan, Shippole — <a href="https://arxiv.org/abs/2309.00071" target="_blank" rel="noopener">YaRN: Efficient Context Window Extension of Large Language Models</a>, arXiv:2309.00071, ICLR 2024 ("Yet another RoPE extensioN")</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>Both linear interpolation and the informal NTK-aware idea either needed substantial fine-tuning or left a real performance gap versus a natively-trained-long model.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Formalizes "NTK-by-parts" — a refined, published version of bloc97's non-uniform interpolation — and adds a correction to the attention "temperature," fixing a softmax-entropy mismatch that interpolation introduces on its own.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>One more hyperparameter (the temperature correction) to get right, and it still benefits from — though needs much less of — fine-tuning at the target length. Validated primarily on LLaMA-family RoPE models.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Extending an existing RoPE model's context cheaply: the paper reports comparable results to Position Interpolation with roughly 10× fewer tokens and 2.5× fewer training steps.</p></div>
+      </div>
+      <div class="widget" id="w-yarn">
+        <div class="widget-title">Interactive — same widget, locked to YaRN's refined curve</div>
+        <canvas data-h="200"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>context extension</label><input type="range" class="rs-ext" min="1" max="8" step="1" value="4"><span class="val rs-ext-out"></span></div>
+        </div>
+        <div class="widget-readout">The illustrative quality bar below the curve is deliberately the least-degraded of the three modes at the same extension factor — that's the point of comparing all three at equal settings.</div>
+      </div>
+    </section>
+
+    <!-- 14. MISTRAL SLIDING WINDOW -->
+    <section class="mech" id="mistral-swa" data-date="Sep–Oct 2023" data-short="Sliding window (decoder)">
+      <div class="mech-meta"><span class="mech-order">14</span><span class="mech-date">Sep–Oct 2023</span></div>
+      <h2>Sliding window attention — the decoder application: Mistral 7B</h2>
+      <p class="mech-source">Mistral AI — official <a href="https://mistral.ai/news/announcing-mistral-7b/" target="_blank" rel="noopener">blog announcement</a> (Sep 27, 2023); paper: Jiang et al., <a href="https://arxiv.org/abs/2310.06825" target="_blank" rel="noopener">Mistral 7B</a>, arXiv:2310.06825 (Oct 10, 2023)</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>By 2023, decoder-only LLMs serving long conversations needed a KV cache that stops growing — Longformer's mechanism existed, but not yet wired into causal, KV-cached autoregressive generation.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Each layer attends only to the previous 4,096 tokens. The KV cache becomes a fixed-size rotating buffer instead of a list that grows with every generated token — O(window · seq_len) compute, bounded memory.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>Same information-loss trade as Longformer's origin: anything outside the window is invisible to that layer directly. Without something like attention sinks (next section), evicting the very first tokens can destabilize generation quality.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Serving long or streaming conversations where a bounded, predictable memory footprint matters more than exact access to the entire history.</p></div>
+      </div>
+      <div class="widget" id="w-mistral">
+        <div class="widget-title">Interactive — fixed window, rotating KV cache, causal</div>
+        <canvas data-h="150"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>window size</label><input type="range" class="sw-window" min="1" max="8" step="1" value="4"><span class="val sw-window-out"></span></div>
+        </div>
+        <div class="widget-readout">The dim outlined dots to the left of the window are already evicted from the cache — gone, not just unattended-to this step.</div>
+      </div>
+    </section>
+
+    <!-- 15. ATTENTION SINKS -->
+    <section class="mech" id="attention-sinks" data-date="Sep 2023" data-short="Attention sinks">
+      <div class="mech-meta"><span class="mech-order">15</span><span class="mech-date">Sep 2023</span></div>
+      <h2>Attention sinks / StreamingLLM</h2>
+      <p class="mech-source">Xiao, Tian, Chen, Han, Lewis (MIT / Meta AI / CMU / NVIDIA) — <a href="https://arxiv.org/abs/2309.17453" target="_blank" rel="noopener">Efficient Streaming Language Models with Attention Sinks</a>, arXiv:2309.17453, ICLR 2024</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>A naive fixed-size sliding-window cache (like Mistral's) collapses in quality once the very first few tokens slide out of the window — even though the total sequence length is fine. The paper traces this to softmax: weights must sum to 1 across attended tokens, so the model needs somewhere to "dump" attention it doesn't want to allocate elsewhere, and under a causal mask the earliest tokens are visible to (and trainable as a target by) nearly every later position.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Always keep the KV of a small number of initial "sink" tokens permanently cached — often just 4 — alongside the normal sliding window. This restores generation stability for streaming/effectively-infinite-length generation, with no fine-tuning required.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>It's a stability fix, not a way to recover true long-range recall — content evicted from the sliding window is still gone. A small constant memory overhead (a few extra cached tokens) is the price.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Any deployment already using a bounded sliding-window KV cache for long or streaming generation — this is close to a strict improvement at near-zero extra cost.</p></div>
+      </div>
+      <div class="widget" id="w-sinks">
+        <div class="widget-title">Interactive — evict the sinks and watch stability drop</div>
+        <canvas data-h="230"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>generation position</label><input type="range" class="as-pos" min="0" max="27" step="1" value="20"><span class="val as-pos-out"></span></div>
+          <button class="toggle as-sinks"></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 16. MLA -->
+    <section class="mech" id="mla" data-date="May 2024" data-short="MLA">
+      <div class="mech-meta"><span class="mech-order">16</span><span class="mech-date">May 2024</span></div>
+      <h2>Multi-head Latent Attention (MLA)</h2>
+      <p class="mech-source">DeepSeek-AI — <a href="https://arxiv.org/abs/2405.04434" target="_blank" rel="noopener">DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model</a>, arXiv:2405.04434</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>The DeepSeek-V2 paper states it directly: GQA and MQA reduce the KV cache, but their performance "does not match MHA." Fewer stored copies costs quality.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>A mechanistically different idea, not a rebrand of GQA: perform <strong>low-rank joint compression</strong> of keys and values <em>together</em> into one small latent vector per token. At attention time, the latent is expanded back out into full-size K and V. What's cached is only the small latent, not fewer copies of full-size vectors.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>Added architectural complexity — extra up/down-projection matrices, and RoPE needs a decoupled handling scheme since rotation doesn't commute cleanly with the compression. More moving parts than "just share some heads."</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>When you want GQA-or-better cache savings without GQA's quality hit — the paper reports MLA matching or beating full MHA quality at a cache footprint comparable to roughly 2.25-group GQA.</p></div>
+      </div>
+      <div class="widget" id="w-mla">
+        <div class="widget-title">Interactive — fewer copies (GQA/MQA) vs. joint compression (MLA)</div>
+        <canvas data-h="220"></canvas>
+        <div class="widget-controls">
+          <button class="toggle mla-mode" data-mode="gqa">GQA / MQA</button>
+          <button class="toggle mla-mode" data-mode="mla">MLA</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 17. DELTANET -->
+    <section class="mech" id="deltanet" data-date="Jun 2024" data-short="DeltaNet (parallel training)">
+      <div class="mech-meta"><span class="mech-order">17</span><span class="mech-date">Jun 2024</span></div>
+      <h2>DeltaNet — parallelizing the delta rule</h2>
+      <p class="mech-source">Yang, Wang, Zhang, Shen, Kim — <a href="https://arxiv.org/abs/2406.06484" target="_blank" rel="noopener">Parallelizing Linear Transformers with the Delta Rule over Sequence Length</a>, arXiv:2406.06484, NeurIPS 2024</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>Schlag et al.'s 2021 delta-rule recurrence (order 07 above) is inherently sequential — it couldn't be parallelized across the sequence dimension, making it impractical to train at real scale on GPUs/TPUs.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>A hardware-efficient, chunk-parallel training algorithm using a memory-efficient Householder-matrix-product representation of the same recurrence — the delta rule's math is unchanged, but it can now be trained fast at scale. Scaled to 1.3B parameters / 100B tokens, beating Mamba and GLA at the time.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>Algorithmic complexity — the chunked WY/Householder representation is intricate machinery compared to the conceptually simple original recurrence. Still a bounded-state recurrent model: recall is limited by the state's fixed size.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Whenever you want the delta rule's correction behavior at production training scale — this, not Schlag et al., is what people mean today when they say "DeltaNet" in most model cards.</p></div>
+      </div>
+      <div class="widget" id="w-deltanet">
+        <div class="widget-title">Interactive — same correction math, now trainable in parallel at scale</div>
+        <canvas data-h="230"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>memory returns</label><input type="range" class="dr-current" min="0" max="100" step="1" value="40"><span class="val dr-current-out"></span></div>
+          <div class="ctrl"><label>wanted answer</label><input type="range" class="dr-wanted" min="0" max="100" step="1" value="55"><span class="val dr-wanted-out"></span></div>
+          <button class="toggle dr-naive"></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 18. GATED DELTANET -->
+    <section class="mech" id="gated-deltanet" data-date="Dec 2024" data-short="Gated DeltaNet">
+      <div class="mech-meta"><span class="mech-order">18</span><span class="mech-date">Dec 2024</span></div>
+      <h2>Gated DeltaNet</h2>
+      <p class="mech-source">Yang, Kautz, Hatamizadeh (NVIDIA) — <a href="https://arxiv.org/abs/2412.06464" target="_blank" rel="noopener">Gated Delta Networks: Improving Mamba2 with Delta Rule</a>, arXiv:2412.06464, ICLR 2025</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>The delta rule alone gives precise, targeted corrections but no efficient way to do wholesale forgetting — clearing out stale state that's no longer useful, which long-context tasks need. Mamba2-style gating does fast coarse forgetting but no targeted correction.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Combine both in one recurrence: a data-dependent decay gate <code>α</code> that can erase state quickly, plus a write-strength <code>β</code> governing the delta-rule-style correction on top of what survives the decay.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>Another set of learned gating parameters and another axis of complexity. Still a finite-state recurrent model underneath — gating helps manage that finite state, it doesn't remove the limit.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Long-context recurrent-state models where stale information genuinely needs to be forgotten, not just diluted by new writes — this is the D-layer building block LightningLM (last section) uses.</p></div>
+      </div>
+      <div class="widget" id="w-gated-deltanet">
+        <div class="widget-title">Interactive — decay gate applied before the correction is written</div>
+        <canvas data-h="250"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>memory returns</label><input type="range" class="dr-current" min="0" max="100" step="1" value="40"><span class="val dr-current-out"></span></div>
+          <div class="ctrl"><label>wanted answer</label><input type="range" class="dr-wanted" min="0" max="100" step="1" value="55"><span class="val dr-wanted-out"></span></div>
+          <div class="ctrl"><label>gate (keep fraction)</label><input type="range" class="dr-gate" min="0" max="1" step="0.05" value="1"><span class="val dr-gate-out"></span></div>
+          <button class="toggle dr-naive"></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 19. NSA -->
+    <section class="mech" id="nsa" data-date="Feb 2025" data-short="Native Sparse Attention">
+      <div class="mech-meta"><span class="mech-order">19</span><span class="mech-date">Feb 2025</span></div>
+      <h2>Native Sparse Attention (NSA)</h2>
+      <p class="mech-source">DeepSeek-AI, Peking University, University of Washington — <a href="https://arxiv.org/abs/2502.11089" target="_blank" rel="noopener">Native Sparse Attention: Hardware-Aligned and Natively Trainable Sparse Attention</a>, arXiv:2502.11089, ACL 2025</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>Most prior sparse-attention schemes were bolted onto an already-trained dense model, or used sparsity patterns not aligned with how GPU kernels actually execute — leaving real speedups on the table.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Three parallel branches per query, trained end-to-end from scratch: coarse-grained <strong>compressed</strong> attention over blocks, fine-grained <strong>selected</strong> attention over the top-scoring blocks, and a <strong>sliding-window</strong> local branch — all designed to be hardware-aligned, not retrofitted.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>Compression genuinely loses token-level detail (one summary now speaks for several tokens), and block selection can miss a relevant block if the summary undersells it. Being "natively trainable" also means you can't simply retrofit it onto an existing dense checkpoint.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Training a new long-context model from scratch where hardware efficiency at training time matters as much as inference-time savings.</p></div>
+      </div>
+      <div class="widget" id="w-nsa">
+        <div class="widget-title">Interactive — every block is scored cheaply, only the top-k get full attention</div>
+        <canvas data-h="180"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>k</label><input type="range" class="tk-k" min="1" max="16" step="1" value="4"><span class="val tk-k-out"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 20. DSA -->
+    <section class="mech" id="dsa" data-date="Sep 2025" data-short="DeepSeek Sparse Attention">
+      <div class="mech-meta"><span class="mech-order">20</span><span class="mech-date">Sep 2025</span></div>
+      <h2>DeepSeek Sparse Attention (DSA)</h2>
+      <p class="mech-source">DeepSeek-AI — <a href="https://github.com/deepseek-ai/DeepSeek-V3.2-Exp" target="_blank" rel="noopener">DeepSeek-V3.2-Exp release notes</a>, built via continued training on top of DeepSeek-V3.1-Terminus (Sep 29, 2025)</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>Even with NSA's design, deciding <em>which</em> blocks deserve expensive attention still needs to be cheap — scoring every block with the same cost as attending to it defeats the purpose.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>A small, cheap "lightning indexer" — a low-rank scoring module — ranks every block's relevance to the current query. A token/block selector then picks only the top-k highest-ranked blocks for the expensive attention read. Same core idea as NSA's selected-attention branch, shipped as a production model refinement.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>The indexer's ranking is itself an approximation — a block the indexer underrates is a block the model never gets to read in full, regardless of how relevant it actually was.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Serving a very long context cheaply when you already have (or can train) a good cheap relevance signal — the indexer only has to be good enough to rank, not attend.</p></div>
+      </div>
+      <div class="widget" id="w-dsa">
+        <div class="widget-title">Interactive — same top-k mechanism, DSA's production framing</div>
+        <canvas data-h="180"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>k</label><input type="range" class="tk-k" min="1" max="16" step="1" value="3"><span class="val tk-k-out"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 21. DROPE -->
+    <section class="mech" id="drope" data-date="Dec 2025" data-short="DroPE">
+      <div class="mech-meta"><span class="mech-order">21</span><span class="mech-date">Dec 2025</span></div>
+      <h2>DroPE</h2>
+      <p class="mech-source">Gelberg, Eguchi, Akiba, Cetin (Sakana AI) — <a href="https://arxiv.org/abs/2512.12167" target="_blank" rel="noopener">DroPE: Extending the Context of Pretrained LLMs by Dropping Their Positional Embeddings</a>, arXiv:2512.12167</p>
+      <div class="flow">
+        <div class="flow-step problem"><div class="label">Problem</div><p>RoPE's rotation formula can be evaluated at any position — that doesn't mean the model behaves well there. A model trained only up to 8K tokens has never learned what rotation patterns beyond that mean, even though the function is happy to keep producing numbers.</p></div>
+        <div class="flow-step fix"><div class="label">Fixed</div><p>Pretrain normally with RoPE, as usual. Then, rather than scaling or interpolating the rotation, <strong>drop the positional embeddings entirely</strong> and run a brief recalibration phase at the original training context length. This restores the model's original in-context perplexity while substantially improving how well it generalizes to longer lengths — without a full long-context fine-tuning run.</p></div>
+        <div class="flow-step cost"><div class="label">Cost</div><p>Validated by Sakana on standard RoPE transformers up to 7B parameters — it's a recent technique, and its behavior at much larger, architecturally different models (hybrid recurrent + sparse-attention stacks) is a live open question, not yet independently established at that scale.</p></div>
+        <div class="flow-step choose"><div class="label">When to choose it</div><p>Extending an already-trained RoPE model's usable context without committing to a full long-context training run.</p></div>
+      </div>
+    </section>
+
+    <!-- SHARED: KV CACHE CALCULATOR -->
+    <section class="mech" id="kv-cache-calculator" data-date="reference" data-short="KV-cache calculator">
+      <div class="mech-meta"><span class="mech-order">reference</span></div>
+      <h2>The shared unit of cost: a KV-cache calculator</h2>
+      <div class="mech-body">
+        <p>Every mechanism above that touches the KV cache — MQA, GQA, MLA, sliding window — is ultimately trying to move one number: <code>bytes = 2 × layers × kv_heads × head_dim × context_length × batch × bytes_per_number</code>. The default preset below reproduces the source lecture's own worked example exactly.</p>
+      </div>
+      <div class="widget" id="w-kvcache">
+        <div class="widget-title">KV-cache size calculator</div>
+        <div class="widget-controls">
+          <div class="ctrl"><label>layers</label><input type="range" class="kv-layers" min="1" max="120" step="1" value="48"><span class="val kv-layers-out"></span></div>
+          <div class="ctrl"><label>KV heads</label><input type="range" class="kv-heads" min="1" max="64" step="1" value="8"><span class="val kv-heads-out"></span></div>
+          <div class="ctrl"><label>head dim</label><input type="range" class="kv-dim" min="32" max="256" step="8" value="128"><span class="val kv-dim-out"></span></div>
+          <div class="ctrl"><label>context (tokens)</label><input type="range" class="kv-ctx" min="1024" max="262144" step="1024" value="32768"><span class="val kv-ctx-out"></span></div>
+          <div class="ctrl"><label>concurrent users</label><input type="range" class="kv-batch" min="1" max="64" step="1" value="8"><span class="val kv-batch-out"></span></div>
+          <button class="toggle kv-precision" data-bytes="4">fp32</button>
+          <button class="toggle kv-precision" data-bytes="2">bf16</button>
+          <button class="toggle kv-precision" data-bytes="1">fp8</button>
+        </div>
+        <div class="widget-readout kv-readout"></div>
+      </div>
+    </section>
+
+    <!-- 22. LIGHTNINGLM CLOSER -->
+    <section class="mech" id="lightninglm" data-date="Jun 2026" data-short="LightningLM 0.1V (case study)">
+      <div class="mech-meta"><span class="mech-order">22 · closer</span><span class="mech-date">Jun 2026</span></div>
+      <h2>LightningLM 0.1V — DroPE applied at 120B scale</h2>
+      <p class="mech-source">Shravan (The School of AI) — <a href="https://arxiv.org/abs/2606.07404" target="_blank" rel="noopener">Reversible Foundations: Training a 120B Sparse MoE through State-Preserving Scaling</a>, arXiv:2606.07404</p>
+      <div class="callout"><strong>Naming correction:</strong> this is not a frontier-lab release. It's a 120B-parameter sparse MoE built by <strong>The School of AI's ERA V4 cohort</strong> — a training program, not a company. The model's actual version string is <strong>0.1V</strong>; "V4" refers to the cohort number, not a model version. And DroPE was not invented here — it's Sakana AI's technique (above), applied downstream at a much larger scale than Sakana's own published experiments covered.</div>
+      <div class="mech-body">
+        <p>The architecture repeats an eight-layer motif, <code>D D D G D D D G</code>, where D is a Gated DeltaNet-style fixed-state layer and G is a sparse-attention layer — six D's compressing history cheaply, two G's giving the model a chance to read selected earlier tokens directly. A "Memory Stream" carries one fixed-size, model-width summary vector across chunk boundaries (written with a stop-gradient, read with a small learned gate), so state from an earlier chunk isn't simply discarded. Positional recalibration via DroPE was applied before the final annealing stage of training.</p>
+      </div>
+      <div class="widget" id="w-lightninglm">
+        <div class="widget-title">Interactive — trade sparse-attention layers for KV cache and compute</div>
+        <canvas data-h="230"></canvas>
+        <div class="widget-controls">
+          <div class="ctrl"><label>G layers per 8</label><input type="range" class="ds-g" min="1" max="8" step="1" value="2"><span class="val ds-g-out"></span></div>
+        </div>
+        <div class="widget-readout">The 8K → 256K, 32× context-extension figure attributed to this model in the original lecture could not be independently confirmed in the fetched paper text during this app's research pass — treat it as reported-but-unverified until checked directly against arXiv:2606.07404 §5.3.</div>
+      </div>
+      <div class="callout">This closes the loop: the same field that started with "every token compares with every other token, always" (2017) now ships a course project mixing recurrent state, sparse attention, cross-chunk memory, and borrowed positional recalibration — because no single mechanism on this page ever became the final answer. Each one fixed a real cost and created a new one for the next mechanism to respond to.</div>
+    </section>
+
+    <footer>
+      <p>Built for Session 8's assignment. Every date and mechanism above was checked against a primary source — see <a href="README.md">README.md</a> for the full source list. Illustrative "quality" and "stability" curves in some widgets are explicitly labeled as illustrative, not measured benchmark numbers.</p>
+    </footer>
+  </main>
+</div>
+
+<script src="js/helpers.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/widgets/qkv.js"></script>
+<script src="js/widgets/pe-compare.js"></script>
+<script src="js/widgets/sparse-pattern.js"></script>
+<script src="js/widgets/head-sharing.js"></script>
+<script src="js/widgets/sliding-window.js"></script>
+<script src="js/widgets/softmax-collapse.js"></script>
+<script src="js/widgets/delta-rule.js"></script>
+<script src="js/widgets/rope.js"></script>
+<script src="js/widgets/rope-scaling.js"></script>
+<script src="js/widgets/attention-sink.js"></script>
+<script src="js/widgets/mla.js"></script>
+<script src="js/widgets/topk.js"></script>
+<script src="js/widgets/kv-cache-calc.js"></script>
+<script src="js/widgets/depth-schedule.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
