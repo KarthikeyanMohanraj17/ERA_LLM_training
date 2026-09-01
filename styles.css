@@ -228,6 +228,20 @@ section.mech:last-of-type { border-bottom: none; }
 
 .flow-step p { margin: 0; color: var(--text); font-size: 14.5px; }
 
+.flow-step ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text);
+  font-size: 14.5px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.flow-step li { padding-left: 2px; }
+.flow-step li::marker { color: var(--text-faint); }
+.flow-step li code { font-size: 0.92em; }
+
 .mech-body p {
   margin: 0 0 16px;
   color: var(--text);
@@ -268,8 +282,17 @@ section.mech:last-of-type { border-bottom: none; }
   margin-bottom: 14px;
 }
 
+/* Canvases keep a minimum drawable width and scroll inside their own
+   container on narrow screens, rather than squashing axes into the gutter. */
+.canvas-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: 6px;
+}
+
 .widget canvas {
   width: 100%;
+  min-width: 640px;
   display: block;
   border-radius: 6px;
   background: var(--bg);
@@ -335,6 +358,116 @@ button.toggle.on {
 .widget-readout .warn { color: var(--bad); }
 .widget-readout .ok { color: var(--good); }
 
+/* ---------- Worked example (short math dry-run, given -> steps -> answer) ---------- */
+
+.worked-example {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent-2);
+  border-radius: 0 8px 8px 0;
+  padding: 16px 20px 18px;
+  margin: 20px 0;
+}
+
+.worked-example .we-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--accent-2);
+  margin-bottom: 12px;
+}
+
+.we-tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  min-width: 52px;
+}
+
+.worked-example .we-given {
+  font-size: 13.5px;
+  color: var(--text-dim);
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+}
+
+.worked-example .we-given code { color: var(--accent); }
+
+.we-steps {
+  list-style: none;
+  counter-reset: we-step;
+  margin: 10px 0;
+  padding: 0;
+}
+
+.we-steps > li {
+  counter-increment: we-step;
+  position: relative;
+  padding: 8px 0 8px 34px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.we-steps > li:last-child { border-bottom: none; }
+
+.we-steps > li::before {
+  content: counter(we-step);
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.we-step-label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.we-math {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  display: inline-block;
+  white-space: pre-line;
+  line-height: 1.6;
+}
+
+.worked-example .we-answer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.worked-example .we-answer .we-tag { color: var(--good); }
+.worked-example .we-answer-text { font-size: 14px; color: var(--good); font-weight: 600; }
+.worked-example .we-answer-text .we-math { color: var(--good); border-color: var(--good); }
+.worked-example .we-note { font-size: 13px; color: var(--text-faint); margin-top: 10px; }
+
 /* ---------- Footer ---------- */
 
 footer {
@@ -344,3 +477,116 @@ footer {
 }
 
 footer a { color: var(--text-dim); }
+
+/* ---------- The fifth link: what the next paper had to fix ---------- */
+
+.flow-step.handoff {
+  border-left-color: var(--accent-2);
+  background: linear-gradient(90deg, var(--accent-soft) 0%, var(--bg-elevated) 60%);
+}
+
+.flow-step.handoff .label { color: var(--accent-2); }
+
+/* ---------- Era bands: the field-priority arc, made structural ---------- */
+
+.era-band {
+  margin: 72px 0 8px;
+  padding: 22px 26px 20px;
+  border: 1px solid var(--border-strong);
+  border-top: 3px solid var(--accent);
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--bg-elevated);
+  scroll-margin-top: 24px;
+}
+
+.era-band .era-years {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.era-band .era-name {
+  font-size: 1.35rem;
+  margin: 0 0 14px;
+  letter-spacing: -0.005em;
+}
+
+.era-facts {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) 1fr;
+  gap: 8px 18px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.era-facts dt {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  padding-top: 3px;
+}
+
+.era-facts dd { margin: 0; color: var(--text-dim); }
+
+@media (max-width: 640px) {
+  .era-facts { grid-template-columns: 1fr; gap: 2px 0; }
+  .era-facts dt { padding-top: 10px; }
+}
+
+/* ---------- Rail: era headings so the arc is visible while scrolling ---------- */
+
+.rail-era {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--accent);
+  padding: 14px 0 4px 14px;
+  margin-left: -2px;
+  border-left: 2px solid transparent;
+  opacity: 0.85;
+}
+
+.rail-list li:first-child .rail-era { padding-top: 2px; }
+
+/* ---------- Synthesis table ---------- */
+
+.synth-table-wrap { overflow-x: auto; margin: 20px 0; }
+
+.synth-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 720px;
+  font-size: 13.5px;
+}
+
+.synth-table th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border-strong);
+  padding: 0 14px 8px 0;
+  vertical-align: bottom;
+}
+
+.synth-table td {
+  padding: 12px 14px 12px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  vertical-align: top;
+}
+
+.synth-table td:first-child { color: var(--text); white-space: nowrap; }
+.synth-table tr:last-child td { border-bottom: none; }
+
+.synth-cites { color: var(--text-dim); font-size: 14px; padding-left: 20px; }
+.synth-cites li { margin-bottom: 10px; }
+.synth-cites strong { color: var(--text); }

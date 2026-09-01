@@ -6,8 +6,29 @@ function initNav() {
   const sections = Array.from(document.querySelectorAll("section.mech"));
   const links = [];
 
+  // Era headings in the rail, so the field-priority arc is visible while
+  // scrolling rather than only stated once in the hero.
+  const ERA_NAMES = {
+    "make-it-work": "Make it work",
+    "bills-come-due": "The bills come due",
+    "position-rebuilt": "Position rebuilt",
+    "stretch-context": "Stretch the context",
+    "state-returns": "State + sparsity return",
+    compression: "Compression gets aggressive",
+    now: "Where this leaves us",
+  };
+  let lastEra = null;
+
   sections.forEach((sec) => {
     const li = document.createElement("li");
+    const era = sec.dataset.era;
+    if (era && era !== lastEra) {
+      lastEra = era;
+      const head = document.createElement("div");
+      head.className = "rail-era";
+      head.textContent = ERA_NAMES[era] || era;
+      li.appendChild(head);
+    }
     const a = document.createElement("a");
     a.href = "#" + sec.id;
     a.className = "rail-link";
