@@ -19,6 +19,87 @@ python3 -m http.server 8000
 
 Then open `http://localhost:8000`.
 
+## How every date was verified
+
+This is the part that is easiest to get wrong and easiest to check, so here is exactly what was
+checked and how, rather than an assurance that it was.
+
+**The rule.** Each date is the arXiv **v1 submission date** — the first time the work was public —
+not the v2 date, not the conference date, not the date a blog post described it later. Where the
+primary source is not a preprint, the rule is the official release date, and those four entries are
+listed separately below with their own sourcing.
+
+**The method.** Every arXiv ID cited anywhere on the page was extracted from `index.html` and sent
+to the arXiv API in one query; the `<published>` field it returns is the v1 timestamp. Titles and
+author lists came back in the same response and were diffed against what the page claims, because a
+half-remembered *title* is the same class of error as a half-remembered date.
+
+**Re-run it yourself.** This needs nothing but `curl` and Python, takes a few seconds, and prints a
+row per paper:
+
+```bash
+IDS=$(grep -o 'arxiv\.org/abs/[0-9.]*' index.html | cut -d/ -f3 | sort -u | paste -sd, -)
+curl -sG https://export.arxiv.org/api/query \
+  --data-urlencode "id_list=$IDS" --data-urlencode "max_results=60" |
+python3 -c '
+import sys,xml.etree.ElementTree as ET
+ns={"a":"http://www.w3.org/2005/Atom"}
+for e in ET.parse(sys.stdin).getroot().findall("a:entry",ns):
+    print(e.find("a:published",ns).text[:10],
+          e.find("a:id",ns).text.rsplit("/",1)[-1],
+          " ".join(e.find("a:title",ns).text.split())[:60])'
+```
+
+**Result of the last run: 33 of 33 IDs resolved, and every arXiv-dated section matches its paper's
+v1 date.** (33 rather than 24, because several sections cite context papers alongside their primary
+source — Transformer-XL and T5 under relative position, Haviv et al. under NoPE, and so on.) Two citation defects did turn up and were fixed — NSA was credited to institutions
+rather than to Yuan et al., and FlashAttention-2/3 were linked without authors, which hid the fact
+that FA-3's first author (Jay Shah) is not FA-1's.
+
+| Section | Date on the page | arXiv | v1 per arXiv | Title as recorded |
+|---|---|---|---|---|
+| Standard attention | Jun 2017 | [1706.03762](https://arxiv.org/abs/1706.03762) | **12 Jun 2017** | Attention Is All You Need |
+| Sinusoidal PE | Jun 2017 | [1706.03762](https://arxiv.org/abs/1706.03762) | **12 Jun 2017** | Attention Is All You Need |
+| Relative position | Mar 2018 | [1803.02155](https://arxiv.org/abs/1803.02155) | **6 Mar 2018** | Self-Attention with Relative Position Representations |
+| Sparse Transformers | Apr 2019 | [1904.10509](https://arxiv.org/abs/1904.10509) | **23 Apr 2019** | Generating Long Sequences with Sparse Transformers |
+| MQA | Nov 2019 | [1911.02150](https://arxiv.org/abs/1911.02150) | **6 Nov 2019** | Fast Transformer Decoding: One Write-Head is All You Need |
+| Sliding window (origin) | Apr 2020 | [2004.05150](https://arxiv.org/abs/2004.05150) | **10 Apr 2020** | Longformer: The Long-Document Transformer |
+| Linear attention | Jun 2020 | [2006.16236](https://arxiv.org/abs/2006.16236) | **29 Jun 2020** | Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention |
+| The delta rule | Feb 2021 | [2102.11174](https://arxiv.org/abs/2102.11174) | **22 Feb 2021** | Linear Transformers Are Secretly Fast Weight Programmers |
+| RoPE | Apr 2021 | [2104.09864](https://arxiv.org/abs/2104.09864) | **20 Apr 2021** | RoFormer: Enhanced Transformer with Rotary Position Embedding |
+| ALiBi | Aug 2021 | [2108.12409](https://arxiv.org/abs/2108.12409) | **27 Aug 2021** | Train Short, Test Long: Attention with Linear Biases Enables Input Length Extrapolation |
+| FlashAttention | May 2022 | [2205.14135](https://arxiv.org/abs/2205.14135) | **27 May 2022** | FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness |
+| GQA | May 2023 | [2305.13245](https://arxiv.org/abs/2305.13245) | **22 May 2023** | GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints |
+| NoPE | May 2023 | [2305.19466](https://arxiv.org/abs/2305.19466) | **31 May 2023** | The Impact of Positional Encoding on Length Generalization in Transformers |
+| Position Interpolation (bonus) | Jun 2023 | [2306.15595](https://arxiv.org/abs/2306.15595) | **27 Jun 2023** | Extending Context Window of Large Language Models via Positional Interpolation |
+| YaRN | Aug 2023 | [2309.00071](https://arxiv.org/abs/2309.00071) | **31 Aug 2023** | YaRN: Efficient Context Window Extension of Large Language Models |
+| Sliding window (decoder) | Sep–Oct 2023 | [2310.06825](https://arxiv.org/abs/2310.06825) | **10 Oct 2023** | Mistral 7B |
+| Attention sinks | Sep 2023 | [2309.17453](https://arxiv.org/abs/2309.17453) | **29 Sep 2023** | Efficient Streaming Language Models with Attention Sinks |
+| MLA | May 2024 | [2405.04434](https://arxiv.org/abs/2405.04434) | **7 May 2024** | DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model |
+| Mamba-2 | May 2024 | [2405.21060](https://arxiv.org/abs/2405.21060) | **31 May 2024** | Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality |
+| DeltaNet (parallel training) | Jun 2024 | [2406.06484](https://arxiv.org/abs/2406.06484) | **10 Jun 2024** | Parallelizing Linear Transformers with the Delta Rule over Sequence Length |
+| Gated DeltaNet | Dec 2024 | [2412.06464](https://arxiv.org/abs/2412.06464) | **9 Dec 2024** | Gated Delta Networks: Improving Mamba2 with Delta Rule |
+| Native Sparse Attention | Feb 2025 | [2502.11089](https://arxiv.org/abs/2502.11089) | **16 Feb 2025** | Native Sparse Attention: Hardware-Aligned and Natively Trainable Sparse Attention |
+| DroPE | Dec 2025 | [2512.12167](https://arxiv.org/abs/2512.12167) | **13 Dec 2025** | Extending the Context of Pretrained LLMs by Dropping Their Positional Embeddings |
+| LightningLM 0.1V (case study) | Jun 2026 | [2606.07404](https://arxiv.org/abs/2606.07404) | **5 Jun 2026** | Reversible Foundations: Training a 120B Sparse MoE through State-Preserving Scaling |
+
+### The four entries with no arXiv paper
+
+| Section | Date on the page | Source, and how solid it is |
+|---|---|---|
+| Learned PE | Jun 2018 | GPT-1 has no arXiv entry; the date is OpenAI's [paper PDF](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf) release. Note the correction above: the *mechanism* is older than this entry, and the section says so. |
+| NTK-aware scaling | ~Jun 30, 2023 | An r/LocalLLaMA post by u/bloc97, not a paper. Reddit's own timestamp was not directly fetchable, so this date is corroborated by secondary sources only. The page marks it approximate with a `~` and the section says it is not peer reviewed. **This is the weakest date on the page and is labelled as such.** |
+| DSA | Sep 2025 | [DeepSeek-V3.2-Exp release notes](https://github.com/deepseek-ai/DeepSeek-V3.2-Exp) on GitHub, 29 Sep 2025. A dated repository release, not a preprint. |
+| KV-cache calculator | — | Not a mechanism and carries no date; it is a reference tool for the shared cost formula. |
+
+### What "verified" does and does not mean here
+
+It means: the paper exists, the ID resolves, the v1 date matches, and the title and first author on
+the page match the record. It does **not** mean every claim about every mechanism was checked
+against the full text. Where a specific claim *was* checked against full text — the LightningLM
+numbers, the Vaswani learned-PE quote, the DroPE abstract — the section or the corrections above
+say so explicitly. Where it was not, treat the description as a careful reading of the abstract.
+
 ## Sources for every date used in the chronology
 
 All dates are the arXiv `v1` submission date or the official release/blog date, not a later
