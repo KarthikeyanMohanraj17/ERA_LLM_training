@@ -99,7 +99,7 @@ function initDepthSchedule(root) {
     ctx.font = font(11.5, 700);
     ctx.fillStyle = cssVar("--accent-2");
     ctx.fillText(`${gCount} G layer${gCount === 1 ? "" : "s"} per 8  ·  ${n - gCount} D layers`, x0, y0 + 84);
-    caption(ctx, x0, h - 8, "Cache share is arithmetic, not a measurement: arXiv:2606.07404 fixes D:G at 3:1 everywhere (6:2 at 8 layers, 15:5 at 20) and never sweeps it.");
+    caption(ctx, x0, h - 8, "Arithmetic, not a measurement — the paper fixes D:G at 3:1 everywhere and never sweeps it.");
   }
 
   bindSlider(root, ".ds-g", ".ds-g-out", (v) => { gCount = Math.round(v); draw(); }, { fmt: (v) => Math.round(v) });

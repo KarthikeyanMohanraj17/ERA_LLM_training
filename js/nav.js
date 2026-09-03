@@ -15,7 +15,6 @@ function initNav() {
     "stretch-context": "Stretch the context",
     "state-returns": "State + sparsity return",
     compression: "Compression gets aggressive",
-    now: "Where this leaves us",
   };
   let lastEra = null;
 

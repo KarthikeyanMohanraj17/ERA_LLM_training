@@ -169,13 +169,6 @@ timeline slot.
 | 13 | NoPE | Kazemnejad, Padhi, Natesan Ramamurthy, Das, Reddy — [arXiv:2305.19466](https://arxiv.org/abs/2305.19466); earlier evidence Haviv et al. [arXiv:2203.16634](https://arxiv.org/abs/2203.16634) | 31 May 2023 | The control condition for six sections of position engineering, and DroPE's direct ancestor — cited in DroPE's own paper. |
 | 20 | Mamba-2 | Dao, Gu — [arXiv:2405.21060](https://arxiv.org/abs/2405.21060); predecessor Mamba [arXiv:2312.00752](https://arxiv.org/abs/2312.00752) | 31 May 2024 | Gated DeltaNet's literal title is *"Improving Mamba2 with Delta Rule"*. Without this section that title cannot be read, and the convergence of the state-space and linear-attention branches is invisible. |
 
-Also added, outside the dated chronology: a closing **"Where this leaves us"** section that
-answers the question the page is named for. It is built on three papers checked directly
-against their arXiv records — Kimi Linear ([arXiv:2510.26692](https://arxiv.org/abs/2510.26692),
-30 Oct 2025), DeepSeek-V4 ([arXiv:2606.19348](https://arxiv.org/abs/2606.19348), 26 Apr 2026)
-and MiniMax Sparse Attention ([arXiv:2606.13392](https://arxiv.org/abs/2606.13392), 11 Jun 2026)
-— and it states explicitly that only the abstracts were read, not the full papers.
-
 ## Notes on the harder-to-source claims
 
 - **NTK-aware scaling's exact date**: the community post that introduced this is on Reddit

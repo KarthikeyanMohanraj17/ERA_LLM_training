@@ -1200,7 +1200,7 @@
           <li>This is the D-layer building block LightningLM (last section) uses.</li>
         </ul></div>
         <div class="flow-step handoff"><div class="label">Hands to &#8594;</div><ul>
-          <li>Bounded state is not fixable inside a recurrent layer, so the answer is architectural — interleave a few exact-attention layers among many recurrent ones. That is the hybrid stack in <a href="#lightninglm">the case study</a>, and in the shipped models in <a href="#where-we-are">Where this leaves us</a>.</li>
+          <li>Bounded state is not fixable inside a recurrent layer, so the answer is architectural — interleave a few exact-attention layers among many recurrent ones. That is the hybrid stack in <a href="#lightninglm">the case study</a> that closes this timeline, and the shape most 2025–26 long-context models converged on.</li>
         </ul></div>
       </div>
       <div class="worked-example">
@@ -1306,7 +1306,7 @@
           <li>The indexer only has to be good enough to rank candidates, not good enough to attend to them itself.</li>
         </ul></div>
         <div class="flow-step handoff"><div class="label">Still open</div><ul>
-          <li><strong>Open, and actively contested.</strong> Whether learned sparse selection beats dense attention at frontier scale is still being argued in public — see <a href="#where-we-are">Where this leaves us</a>, where one lab reverted to full attention and then reversed again seven months later.</li>
+          <li><strong>Open, and actively contested.</strong> Whether learned sparse selection beats dense attention at frontier scale is still being argued in public, and the answer keeps moving — labs have shipped sparse attention, reverted to dense, and gone back again inside a single year.</li>
         </ul></div>
       </div>
       <div class="worked-example">
@@ -1471,7 +1471,7 @@
           <li>Not when you need a reproducible published baseline — for that, the hybrid models in the closing section below have far more scrutiny behind them.</li>
         </ul></div>
         <div class="flow-step handoff"><div class="label">Hands to &#8594;</div><ul>
-          <li>Nothing, yet — this is the end of the dated timeline. <a href="#where-we-are">Where this leaves us</a> steps outside the chronology to say what the field actually shipped.</li>
+          <li>Nothing, yet — this is the end of the dated timeline, and the argument it closes on is still live.</li>
         </ul></div>
       </div>
       <div class="widget" id="w-lightninglm">
@@ -1485,79 +1485,8 @@
       <div class="callout">This closes the loop: the same field that started with "every token compares with every other token, always" (2017) now ships a course project mixing recurrent state, sparse attention, cross-chunk memory, and borrowed positional recalibration — because no single mechanism on this page ever became the final answer. Each one fixed a real cost and created a new one for the next mechanism to respond to.</div>
     </section>
 
-    <div class="era-band" id="era-now">
-      <div class="era-years">as of September 2026</div>
-      <h3 class="era-name">Where this leaves us</h3>
-      <dl class="era-facts">
-        <dt>Why this section exists</dt><dd>A dated list ends; a question does not. This steps outside the chronology to answer the thing a reader actually came for.</dd>
-      </dl>
-    </div>
-
-    <!-- CLOSER: STATE OF PLAY -->
-    <section class="mech" id="where-we-are" data-era="now" data-date="Sep 2026" data-short="Where this leaves us">
-      <div class="mech-meta"><span class="mech-order">closer</span><span class="mech-date">as of Sep 2026</span></div>
-      <h2>Where this leaves us — how attention actually works now</h2>
-      <p class="mech-source">Sourcing note: every paper below was checked by fetching its arXiv record directly — title, author list and v1 submission date. Claims about <em>mechanism</em> come from the abstracts, which I read; I have not read these papers in full, and this section says so rather than implying deeper knowledge than it has.</p>
-
-      <div class="mech-body">
-        <p>Twenty-eight sections is a lot of mechanisms, and a reasonable reaction is "fine, but which of these does a real model use?" The honest short answer: <strong>almost none of them alone, and most of them together.</strong> A 2026 model is not built on one of the ideas above — it is a stack that picks a different answer at each layer.</p>
-      </div>
-
-      <div class="synth-table-wrap">
-      <table class="synth-table">
-        <thead><tr><th>Thread</th><th>What actually won</th><th>What lost, and why</th><th>Still contested</th></tr></thead>
-        <tbody>
-        <tr>
-          <td><strong>Position</strong></td>
-          <td><a href="#rope">RoPE</a>, essentially unopposed — plus continued pretraining at the longer length when you want more context.</td>
-          <td><a href="#learned-pe">Learned tables</a> (no rows past the end), <a href="#alibi">ALiBi</a> (permanent recency bias), and largely the whole training-free rescaling family — <a href="#position-interpolation">PI</a>, <a href="#ntk-aware">NTK-aware</a>, <a href="#yarn">YaRN</a> — which turned out to be bridges rather than destinations.</td>
-          <td>Whether an explicit position signal is needed at all. <a href="#nope">NoPE</a> said maybe not in 2023; <a href="#drope">DroPE</a> said not-after-pretraining in 2025. Interleaving position-free layers with RoPE layers is now a real deployed pattern.</td>
-        </tr>
-        <tr>
-          <td><strong>KV cache</strong></td>
-          <td><a href="#gqa">GQA</a> is the default almost everywhere. <a href="#mla">MLA</a> won where teams could afford the complexity — and it persists: Kimi Linear (2025) still builds on it.</td>
-          <td><a href="#mqa">MQA</a> on its own — it survives only as GQA's extreme setting.</td>
-          <td>How far compression can go before recall breaks. DeepSeek-V4 (2026) pairs "Compressed Sparse Attention" with "Heavily Compressed Attention", which is the same question asked at two severities in one model.</td>
-        </tr>
-        <tr>
-          <td><strong>Exact attention</strong></td>
-          <td><a href="#flash-attention">FlashAttention</a>, completely. It is not a choice any more; it is what attention <em>is</em> on a GPU.</td>
-          <td>Nothing — this is the one entry on the page that cost nothing in quality.</td>
-          <td>Nothing about whether to use it. Only which GPU generation the current kernel targets.</td>
-        </tr>
-        <tr>
-          <td><strong>Long context</strong></td>
-          <td>Learned sparse attention, in production. DeepSeek-V4 (Apr 2026) reports a million-token context from a hybrid of two compressed-attention schemes; MiniMax Sparse Attention (Jun 2026) is block-sparse selection layered on top of GQA.</td>
-          <td><a href="#sparse-transformer">Hand-designed</a> sparsity patterns. Every 2025–26 scheme learns which tokens matter instead of assuming a geometry.</td>
-          <td>Block-level versus token-level selection. <a href="#nsa">NSA</a> and MiniMax choose blocks; <a href="#dsa">DSA</a> chooses individual tokens. Finer granularity misses less and costs more to index — genuinely unsettled.</td>
-        </tr>
-        <tr>
-          <td><strong>Recurrent state</strong></td>
-          <td>Hybrids, decisively. Not pure recurrence and not pure attention — a few exact-attention layers among many recurrent ones.</td>
-          <td>Replacing attention outright. Every attempt ended up hybrid, for the reason in the <a href="#mamba2">Mamba-2 worked example</a>: a fixed state cannot store per-token detail, and that is arithmetic, not a tuning failure.</td>
-          <td>The ratio, and whether hybrids genuinely beat full attention. Kimi Linear (Oct 2025) is the first paper to claim they do <em>under fair comparison</em> — a claim worth watching rather than assuming.</td>
-        </tr>
-        </tbody>
-      </table>
-      </div>
-
-      <div class="mech-body">
-        <p><strong>So: what is in the box?</strong> Take a current long-context open model and you will typically find <a href="#gqa">GQA</a> or <a href="#mla">MLA</a> for the cache, <a href="#rope">RoPE</a> for position, <a href="#flash-attention">FlashAttention</a> kernels underneath everything, a learned sparse-selection path for long inputs, and — increasingly — a majority of layers that are <a href="#gated-deltanet">recurrent rather than attentional</a>, with attention reserved for the minority of layers that need to retrieve an exact earlier token. <a href="#mistral-swa">Sliding windows</a> and <a href="#attention-sinks">attention sinks</a> show up in the models that stream.</p>
-        <p>The three papers this rests on, each checked directly against its arXiv record:</p>
-        <ul class="synth-cites">
-          <li><strong>Kimi Linear</strong> — <a href="https://arxiv.org/abs/2510.26692" target="_blank" rel="noopener">arXiv:2510.26692</a> (v1 30 Oct 2025). Its abstract states it "outperforms full attention under fair comparisons" and that its core module "extends <a href="#gated-deltanet">Gated DeltaNet</a> with a finer-grained gating mechanism", in a layerwise hybrid with <a href="#mla">MLA</a>. That is two sections of this page, combined, in a shipped architecture.</li>
-          <li><strong>DeepSeek-V4</strong> — <a href="https://arxiv.org/abs/2606.19348" target="_blank" rel="noopener">arXiv:2606.19348</a> (v1 26 Apr 2026). A million-token context via "a hybrid attention architecture that combines Compressed Sparse Attention (CSA) and Heavily Compressed Attention (HCA)". The direct successor to <a href="#dsa">DSA</a> above, which means this page's most recent DeepSeek entry is already a generation behind.</li>
-          <li><strong>MiniMax Sparse Attention</strong> — <a href="https://arxiv.org/abs/2606.13392" target="_blank" rel="noopener">arXiv:2606.13392</a> (v1 11 Jun 2026). "A lightweight Index Branch scores key-value blocks and independently selects a Top-k subset for each GQA group" — <a href="#nsa">NSA</a>'s selected-attention branch, built on <a href="#gqa">GQA</a>, shipped.</li>
-        </ul>
-      </div>
-
-      <div class="callout"><strong>What I could not verify, stated plainly.</strong> I read these three abstracts, not the full papers, and I did not benchmark anything. Claims about what is "typical" in current models are my reading of the published record, not a survey. If you are deciding an architecture on this, read the papers — and note that the one thing this page can say with real confidence is not which mechanism wins, but that <em>every</em> one of them is a trade, and the trade only resolves once you name the workload.</div>
-
-      <div class="callout"><strong>The shape of the whole thing.</strong> Nine years, six eras, and not one mechanism that made its predecessor obsolete. Standard attention was never wrong — it was expensive in two specific ways, and everything since has been the field deciding, workload by workload, which of those two bills it would rather pay. The page ends where it does because that argument is still live.</div>
-    </section>
-
     <footer>
-      <p>Built for Session 8's assignment. Every date and mechanism above was checked against a primary source — see <a href="README.md">README.md</a> for the full source list. Illustrative "quality" and "stability" curves in some widgets are explicitly labeled as illustrative, not measured benchmark numbers.</p>
+      <p>Built for Session 8's assignment. Every date and mechanism above was checked against a primary source — see <a href="README.md">README.md</a> for the full source list. Where a widget draws an illustrative curve rather than measured numbers, it says so on the canvas.</p>
     </footer>
   </main>
 </div>
