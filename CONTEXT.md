@@ -1,6 +1,6 @@
 # Attention Timeline Webapp
 
-A static, single-page chronological tour of attention mechanisms (2017 → 2026), built for a course assignment. Each mechanism gets one `<section class="mech">` with sourced prose and an interactive widget.
+A static, single-page chronological tour of attention mechanisms (2017 → 2026). Each mechanism gets one `<section class="mech">` with sourced prose and an interactive widget.
 
 ## Language
 

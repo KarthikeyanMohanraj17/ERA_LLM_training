@@ -1,7 +1,8 @@
 # How Attention Actually Got Here
 
-An interactive, chronological tour of every major attention mechanism, built for the
-Session 8 assignment. Static site — no build step, no framework, no backend.
+An interactive, chronological tour of every major attention mechanism, from scaled
+dot-product attention in 2017 to the hybrid stacks of 2026. Static site — no build step,
+no framework, no backend.
 
 ## What this is
 
@@ -38,7 +39,7 @@ used in the app.
 | 8 | RoPE | Su, Lu, Pan, Murtadha, Wen, Liu, "RoFormer: Enhanced Transformer with Rotary Position Embedding," [arXiv:2104.09864](https://arxiv.org/abs/2104.09864) | Apr 2021 |
 | 9 | ALiBi | Press, Smith, Lewis, "Train Short, Test Long: Attention with Linear Biases Enables Input Length Extrapolation," [arXiv:2108.12409](https://arxiv.org/abs/2108.12409) | Aug 2021 |
 | 10 | Grouped-Query Attention (GQA) | Ainslie, Lee-Thorp, de Jong, Zemlyanskiy, Lebrón, Sanghai (Google Research), "GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints," [arXiv:2305.13245](https://arxiv.org/abs/2305.13245) | May 2023 |
-| 11 | Position Interpolation (bonus mechanism, not covered in the original lecture) | Chen, Wong, Chen, Tian (Meta), "Extending Context Window of Large Language Models via Positional Interpolation," [arXiv:2306.15595](https://arxiv.org/abs/2306.15595) | Jun 2023 |
+| 11 | Position Interpolation | Chen, Wong, Chen, Tian (Meta), "Extending Context Window of Large Language Models via Positional Interpolation," [arXiv:2306.15595](https://arxiv.org/abs/2306.15595) | Jun 2023 |
 | 12 | NTK-aware RoPE scaling | u/bloc97, r/LocalLLaMA community post (not peer-reviewed); related independent work by kaiokendev the same month | ~Jun 30, 2023 (approximate — see note below) |
 | 13 | YaRN | Peng, Quesnelle, Fan, Shippole, "YaRN: Efficient Context Window Extension of Large Language Models," [arXiv:2309.00071](https://arxiv.org/abs/2309.00071) | Aug 2023 |
 | 14 | Sliding window attention (decoder + KV-cache application) | Mistral AI, [official blog](https://mistral.ai/news/announcing-mistral-7b/); Jiang et al., "Mistral 7B," [arXiv:2310.06825](https://arxiv.org/abs/2310.06825) | Sep 2023 (blog) / Oct 2023 (paper) |
@@ -49,14 +50,14 @@ used in the app.
 | 19 | Native Sparse Attention (NSA) | DeepSeek-AI, Peking University, University of Washington, "Native Sparse Attention: Hardware-Aligned and Natively Trainable Sparse Attention," [arXiv:2502.11089](https://arxiv.org/abs/2502.11089) | Feb 2025 |
 | 20 | DeepSeek Sparse Attention (DSA) | DeepSeek-AI, [DeepSeek-V3.2-Exp release](https://github.com/deepseek-ai/DeepSeek-V3.2-Exp) | Sep 2025 |
 | 21 | DroPE | Gelberg, Eguchi, Akiba, Cetin (Sakana AI), "DroPE: Extending the Context of Pretrained LLMs by Dropping Their Positional Embeddings," [arXiv:2512.12167](https://arxiv.org/abs/2512.12167) | Dec 2025 |
-| 22 | LightningLM 0.1V (case study) | Shravan (The School of AI, ERA V4 cohort), "Reversible Foundations: Training a 120B Sparse MoE through State-Preserving Scaling," [arXiv:2606.07404](https://arxiv.org/abs/2606.07404) | Jun 2026 |
+| 22 | LightningLM 0.1V (case study) | Shravan (The School of AI), "Reversible Foundations: Training a 120B Sparse MoE through State-Preserving Scaling," [arXiv:2606.07404](https://arxiv.org/abs/2606.07404) | Jun 2026 |
 
 ## Corrections found by checking against primary sources
 
 The brief said to check every date against the actual paper and not to accept anything an
 agent asserted confidently. Doing that turned up six errors — five of them in this app's own
-earlier draft, one in the source lecture material. Each was verified by fetching the primary
-source directly, not by asking a model.
+earlier draft of this page, one in material widely repeated about LightningLM. Each was
+verified by fetching the primary source directly, not by asking a model.
 
 ### 1. Numbers attributed to a real paper that are not in it — the worst one
 
@@ -79,9 +80,9 @@ the false attribution explicit, on a real, citable paper by a named real person.
 The widget now shows only what is derivable — if only G layers hold a cache, cache share is
 `G ÷ 8` — labelled as this page's arithmetic, attributed to nobody.
 
-### 2. The "8K → 256K, 32×" figure — an error in the source lecture
+### 2. The "8K → 256K, 32×" figure is not in the paper
 
-This figure was attributed to LightningLM in the lecture material. It is not in the paper.
+This figure is widely attributed to LightningLM. It is not in the paper.
 Searching the full text returns zero hits for `256K` and zero for `32×`. The paper states the
 opposite outright:
 
@@ -156,7 +157,7 @@ used `1/(1 + (s−1)·d^1.6)`, the NTK curve with an invented exponent — and n
 published NTK-by-parts rule, keyed on each dimension's wavelength relative to the trained
 context.
 
-## Mechanisms added beyond the assignment's minimum list
+## Mechanisms beyond the usual list
 
 Each was held to the same standard as the rest of the timeline: v1 date fetched from the arXiv
 API, title and author list verified, and a stated motivation / mechanism / advantage / cost /
@@ -190,28 +191,29 @@ timeline slot.
   attention time — a different mechanism from GQA/MQA's "fewer stored copies," not a rebrand
   of it. The paper itself states GQA/MQA underperform full MHA while MLA does not.
 - **DroPE and "LightningLM V4"**: both are real and independently verifiable, but the naming
-  in the source lecture material is imprecise, and it matters because LightningLM is this
-  course's own project. DroPE originates from Sakana AI (Dec 2025), not from LightningLM's
-  authors. "LightningLM" is a 120B-parameter sparse MoE built by The School of AI's ERA V4
-  cohort — its actual version string is **0.1V**, not "V4"; "V4" names the cohort, not a model
-  version. The DDDGDDDG layer schedule and the "Memory Stream" cross-chunk mechanism are
-  confirmed in the paper (§3.2, §5.3); DroPE is confirmed as applied to LightningLM, but as a
-  downstream application of Sakana's technique, not something invented in-house.
-- **The "8K → 256K, 32× extension" figure** attributed to LightningLM in the source lecture
-  could not be independently confirmed during this app's research pass — the relevant section
-  of the paper was only partially retrievable. The app presents this figure as reported, not
-  as independently verified, and flags exactly where to re-check it (arXiv:2606.07404, §5.3).
+  is commonly muddled. DroPE originates from Sakana AI (Dec 2025), not from LightningLM's
+  authors. "LightningLM" is a 120B-parameter sparse MoE from The School of AI — its version
+  string is **0.1V**, not "V4"; "V4" names the training programme, not a model version. The
+  DDDGDDDG layer schedule (§3.1/Table 1) and the "Memory Stream" cross-chunk mechanism (§3.2)
+  are confirmed in the paper; DroPE is confirmed as applied to it (§5.3), but as a downstream
+  application of Sakana's technique, not something invented in-house.
 
 ## Illustrative vs. measured numbers
 
-A few widgets (RoPE-scaling quality bars, the attention-sink stability curve, the
-LightningLM cache/compute multipliers) use simple illustrative formulas to show the *shape*
-of a real, reported finding — they are explicitly labeled "illustrative" in the UI and are
-not measured benchmark numbers. The KV-cache calculator is the one widget that computes an
-exact, checkable formula: `bytes = 2 × layers × kv_heads × head_dim × context × batch ×
-bytes_per_number`. Its defaults (48 layers, 8 KV heads, head_dim 128, bf16, 32,768-token
-context) reproduce the source lecture's own worked example: ≈6.44 GB for one user, ≈51.54 GB
-at 8 concurrent users.
+Almost every widget now computes from the published rule for its mechanism, or from
+arithmetic the reader can redo by hand. Three illustrative formulas remain, each labelled
+as such on the canvas: DroPE's quality-vs-length curves, and the two shapes in the RoPE
+family that show *direction* rather than measured values.
+
+The RoPE-scaling "quality" meters and the LightningLM cache/compute multipliers were
+removed outright — see the corrections above; the first were invented numbers the page
+told readers to draw a conclusion from, and the second were invented numbers attributed to
+a real paper.
+
+The KV-cache calculator computes an exact, checkable formula: `bytes = 2 × layers ×
+kv_heads × head_dim × context × batch × bytes_per_number`. Its defaults (48 layers, 8 KV
+heads, head_dim 128, bf16, 32,768-token context) give ≈6.44 GB for one user and ≈51.54 GB
+at 8 concurrent users — worked through by hand in the section itself.
 
 ## Every section has a worked example
 
