@@ -4,6 +4,9 @@ An interactive, chronological tour of every major attention mechanism, from scal
 dot-product attention in 2017 to the hybrid stacks of 2026. Static site — no framework, no
 backend, nothing to compile in order to view it.
 
+**Live:** <https://unrivaled-chimera-0d8a5a.netlify.app/> · **Sources and date receipts:**
+<https://unrivaled-chimera-0d8a5a.netlify.app/sources>
+
 **Repository:** <https://github.com/KarthikeyanMohanraj17/ERA_LLM_training> — this project
 lives in `session8_attention-timeline/`.
 
