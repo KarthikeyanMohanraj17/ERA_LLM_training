@@ -1,0 +1,10 @@
+# Duplicated from netlify.toml so a drag-and-drop deploy (which ignores
+# netlify.toml) still gets sane caching. Keep the two in sync.
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+/js/*
+  Cache-Control: public, max-age=300
+/styles.css
+  Cache-Control: public, max-age=300

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sources — How Attention Actually Got Here</title>
+<meta name="description" content="Every date in the attention timeline, with the primary source it was checked against and the method used to verify it." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d12'/%3E%3Cpath d='M6 22V10m0 0l10 12M16 10v12m0-12l10 12M26 10v12' stroke='%236ea8ff' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+  .doc { max-width: 860px; margin: 0 auto; padding: 48px 24px 120px; }
+  .doc h1 { font-size: 2rem; letter-spacing: -0.01em; margin: 0 0 8px; }
+  .doc h2 { font-size: 1.35rem; margin: 44px 0 12px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .doc h3 { font-size: 1.05rem; margin: 28px 0 10px; color: var(--text); }
+  .doc p, .doc li { color: var(--text-dim); font-size: 15px; }
+  .doc li { margin-bottom: 8px; }
+  .doc code { font-family: var(--mono); font-size: 0.9em; background: var(--bg-elevated);
+               border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--accent); }
+  .doc pre { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px;
+              padding: 14px 16px; overflow-x: auto; }
+  .doc pre code { background: none; border: none; padding: 0; color: var(--text-dim); font-size: 12.5px; line-height: 1.7; }
+  .doc blockquote { margin: 14px 0; padding: 10px 18px; border-left: 3px solid var(--accent-2);
+                     background: var(--bg-elevated); color: var(--text-dim); font-size: 14.5px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  .doc table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; }
+  .doc th { text-align: left; font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+             letter-spacing: 0.06em; color: var(--text-faint); border-bottom: 1px solid var(--border-strong);
+             padding: 0 12px 8px 0; vertical-align: bottom; }
+  .doc td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--border);
+             color: var(--text-dim); vertical-align: top; }
+  .backlink { font-family: var(--mono); font-size: 12.5px; display: inline-block; margin-bottom: 28px; }
+</style>
+</head>
+<body>
+<div class="doc">
+<a class="backlink" href="./">&#8592; back to the timeline</a>
+<h1 id="how-attention-actually-got-here">How Attention Actually Got Here</h1>
+<p>An interactive, chronological tour of every major attention mechanism, from scaled dot-product attention in 2017 to the hybrid stacks of 2026. Static site — no build step, no framework, no backend.</p>
+<h2 id="what-this-is">What this is</h2>
+<p>Standard scaled dot-product attention (2017) opens the page. Every section after that is ordered by <strong>real launch date</strong>, not by teaching order or topic grouping, so the story reads the way the field actually moved: a mechanism solves a real problem, creates a new cost, and a later mechanism responds to that cost.</p>
+<h2 id="running-it-locally">Running it locally</h2>
+<pre><code>python3 -m http.server 8000</code></pre>
+<p>Then open <code>http://localhost:8000</code>.</p>
+<h2 id="how-every-date-was-verified">How every date was verified</h2>
+<p>This is the part that is easiest to get wrong and easiest to check, so here is exactly what was checked and how, rather than an assurance that it was.</p>
+<p><strong>The rule.</strong> Each date is the arXiv <strong>v1 submission date</strong> — the first time the work was public — not the v2 date, not the conference date, not the date a blog post described it later. Where the primary source is not a preprint, the rule is the official release date, and those four entries are listed separately below with their own sourcing.</p>
+<p><strong>The method.</strong> Every arXiv ID cited anywhere on the page was extracted from <code>index.html</code> and sent to the arXiv API in one query; the <code>&lt;published&gt;</code> field it returns is the v1 timestamp. Titles and author lists came back in the same response and were diffed against what the page claims, because a half-remembered <em>title</em> is the same class of error as a half-remembered date.</p>
+<p><strong>Re-run it yourself.</strong> This needs nothing but <code>curl</code> and Python, takes a few seconds, and prints a row per paper:</p>
+<pre><code>IDS=$(grep -o 'arxiv\.org/abs/[0-9.]*' index.html | cut -d/ -f3 | sort -u | paste -sd, -)
+curl -sG https://export.arxiv.org/api/query \
+  --data-urlencode "id_list=$IDS" --data-urlencode "max_results=60" |
+python3 -c '
+import sys,xml.etree.ElementTree as ET
+ns={"a":"http://www.w3.org/2005/Atom"}
+for e in ET.parse(sys.stdin).getroot().findall("a:entry",ns):
+    print(e.find("a:published",ns).text[:10],
+          e.find("a:id",ns).text.rsplit("/",1)[-1],
+          " ".join(e.find("a:title",ns).text.split())[:60])'</code></pre>
+<p><strong>Result of the last run: 33 of 33 IDs resolved, and every arXiv-dated section matches its paper's v1 date.</strong> (33 rather than 24, because several sections cite context papers alongside their primary source — Transformer-XL and T5 under relative position, Haviv et al. under NoPE, and so on.) Two citation defects did turn up and were fixed — NSA was credited to institutions rather than to Yuan et al., and FlashAttention-2/3 were linked without authors, which hid the fact that FA-3's first author (Jay Shah) is not FA-1's.</p>
+<div class="table-wrap"><table><thead><tr><th>Section</th><th>Date on the page</th><th>arXiv</th><th>v1 per arXiv</th><th>Title as recorded</th></tr></thead><tbody>
+<tr><td>Standard attention</td><td>Jun 2017</td><td><a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">1706.03762</a></td><td><strong>12 Jun 2017</strong></td><td>Attention Is All You Need</td></tr>
+<tr><td>Sinusoidal PE</td><td>Jun 2017</td><td><a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">1706.03762</a></td><td><strong>12 Jun 2017</strong></td><td>Attention Is All You Need</td></tr>
+<tr><td>Relative position</td><td>Mar 2018</td><td><a href="https://arxiv.org/abs/1803.02155" target="_blank" rel="noopener">1803.02155</a></td><td><strong>6 Mar 2018</strong></td><td>Self-Attention with Relative Position Representations</td></tr>
+<tr><td>Sparse Transformers</td><td>Apr 2019</td><td><a href="https://arxiv.org/abs/1904.10509" target="_blank" rel="noopener">1904.10509</a></td><td><strong>23 Apr 2019</strong></td><td>Generating Long Sequences with Sparse Transformers</td></tr>
+<tr><td>MQA</td><td>Nov 2019</td><td><a href="https://arxiv.org/abs/1911.02150" target="_blank" rel="noopener">1911.02150</a></td><td><strong>6 Nov 2019</strong></td><td>Fast Transformer Decoding: One Write-Head is All You Need</td></tr>
+<tr><td>Sliding window (origin)</td><td>Apr 2020</td><td><a href="https://arxiv.org/abs/2004.05150" target="_blank" rel="noopener">2004.05150</a></td><td><strong>10 Apr 2020</strong></td><td>Longformer: The Long-Document Transformer</td></tr>
+<tr><td>Linear attention</td><td>Jun 2020</td><td><a href="https://arxiv.org/abs/2006.16236" target="_blank" rel="noopener">2006.16236</a></td><td><strong>29 Jun 2020</strong></td><td>Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention</td></tr>
+<tr><td>The delta rule</td><td>Feb 2021</td><td><a href="https://arxiv.org/abs/2102.11174" target="_blank" rel="noopener">2102.11174</a></td><td><strong>22 Feb 2021</strong></td><td>Linear Transformers Are Secretly Fast Weight Programmers</td></tr>
+<tr><td>RoPE</td><td>Apr 2021</td><td><a href="https://arxiv.org/abs/2104.09864" target="_blank" rel="noopener">2104.09864</a></td><td><strong>20 Apr 2021</strong></td><td>RoFormer: Enhanced Transformer with Rotary Position Embedding</td></tr>
+<tr><td>ALiBi</td><td>Aug 2021</td><td><a href="https://arxiv.org/abs/2108.12409" target="_blank" rel="noopener">2108.12409</a></td><td><strong>27 Aug 2021</strong></td><td>Train Short, Test Long: Attention with Linear Biases Enables Input Length Extrapolation</td></tr>
+<tr><td>FlashAttention</td><td>May 2022</td><td><a href="https://arxiv.org/abs/2205.14135" target="_blank" rel="noopener">2205.14135</a></td><td><strong>27 May 2022</strong></td><td>FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness</td></tr>
+<tr><td>GQA</td><td>May 2023</td><td><a href="https://arxiv.org/abs/2305.13245" target="_blank" rel="noopener">2305.13245</a></td><td><strong>22 May 2023</strong></td><td>GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints</td></tr>
+<tr><td>NoPE</td><td>May 2023</td><td><a href="https://arxiv.org/abs/2305.19466" target="_blank" rel="noopener">2305.19466</a></td><td><strong>31 May 2023</strong></td><td>The Impact of Positional Encoding on Length Generalization in Transformers</td></tr>
+<tr><td>Position Interpolation (bonus)</td><td>Jun 2023</td><td><a href="https://arxiv.org/abs/2306.15595" target="_blank" rel="noopener">2306.15595</a></td><td><strong>27 Jun 2023</strong></td><td>Extending Context Window of Large Language Models via Positional Interpolation</td></tr>
+<tr><td>YaRN</td><td>Aug 2023</td><td><a href="https://arxiv.org/abs/2309.00071" target="_blank" rel="noopener">2309.00071</a></td><td><strong>31 Aug 2023</strong></td><td>YaRN: Efficient Context Window Extension of Large Language Models</td></tr>
+<tr><td>Sliding window (decoder)</td><td>Sep–Oct 2023</td><td><a href="https://arxiv.org/abs/2310.06825" target="_blank" rel="noopener">2310.06825</a></td><td><strong>10 Oct 2023</strong></td><td>Mistral 7B</td></tr>
+<tr><td>Attention sinks</td><td>Sep 2023</td><td><a href="https://arxiv.org/abs/2309.17453" target="_blank" rel="noopener">2309.17453</a></td><td><strong>29 Sep 2023</strong></td><td>Efficient Streaming Language Models with Attention Sinks</td></tr>
+<tr><td>MLA</td><td>May 2024</td><td><a href="https://arxiv.org/abs/2405.04434" target="_blank" rel="noopener">2405.04434</a></td><td><strong>7 May 2024</strong></td><td>DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model</td></tr>
+<tr><td>Mamba-2</td><td>May 2024</td><td><a href="https://arxiv.org/abs/2405.21060" target="_blank" rel="noopener">2405.21060</a></td><td><strong>31 May 2024</strong></td><td>Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality</td></tr>
+<tr><td>DeltaNet (parallel training)</td><td>Jun 2024</td><td><a href="https://arxiv.org/abs/2406.06484" target="_blank" rel="noopener">2406.06484</a></td><td><strong>10 Jun 2024</strong></td><td>Parallelizing Linear Transformers with the Delta Rule over Sequence Length</td></tr>
+<tr><td>Gated DeltaNet</td><td>Dec 2024</td><td><a href="https://arxiv.org/abs/2412.06464" target="_blank" rel="noopener">2412.06464</a></td><td><strong>9 Dec 2024</strong></td><td>Gated Delta Networks: Improving Mamba2 with Delta Rule</td></tr>
+<tr><td>Native Sparse Attention</td><td>Feb 2025</td><td><a href="https://arxiv.org/abs/2502.11089" target="_blank" rel="noopener">2502.11089</a></td><td><strong>16 Feb 2025</strong></td><td>Native Sparse Attention: Hardware-Aligned and Natively Trainable Sparse Attention</td></tr>
+<tr><td>DroPE</td><td>Dec 2025</td><td><a href="https://arxiv.org/abs/2512.12167" target="_blank" rel="noopener">2512.12167</a></td><td><strong>13 Dec 2025</strong></td><td>Extending the Context of Pretrained LLMs by Dropping Their Positional Embeddings</td></tr>
+<tr><td>LightningLM 0.1V (case study)</td><td>Jun 2026</td><td><a href="https://arxiv.org/abs/2606.07404" target="_blank" rel="noopener">2606.07404</a></td><td><strong>5 Jun 2026</strong></td><td>Reversible Foundations: Training a 120B Sparse MoE through State-Preserving Scaling</td></tr>
+</tbody></table></div>
+<h3 id="the-four-entries-with-no-arxiv-paper">The four entries with no arXiv paper</h3>
+<div class="table-wrap"><table><thead><tr><th>Section</th><th>Date on the page</th><th>Source, and how solid it is</th></tr></thead><tbody>
+<tr><td>Learned PE</td><td>Jun 2018</td><td>GPT-1 has no arXiv entry; the date is OpenAI's <a href="https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf" target="_blank" rel="noopener">paper PDF</a> release. Note the correction above: the <em>mechanism</em> is older than this entry, and the section says so.</td></tr>
+<tr><td>NTK-aware scaling</td><td>~Jun 30, 2023</td><td>An r/LocalLLaMA post by u/bloc97, not a paper. Reddit's own timestamp was not directly fetchable, so this date is corroborated by secondary sources only. The page marks it approximate with a <code>~</code> and the section says it is not peer reviewed. <strong>This is the weakest date on the page and is labelled as such.</strong></td></tr>
+<tr><td>DSA</td><td>Sep 2025</td><td><a href="https://github.com/deepseek-ai/DeepSeek-V3.2-Exp" target="_blank" rel="noopener">DeepSeek-V3.2-Exp release notes</a> on GitHub, 29 Sep 2025. A dated repository release, not a preprint.</td></tr>
+<tr><td>KV-cache calculator</td><td>—</td><td>Not a mechanism and carries no date; it is a reference tool for the shared cost formula.</td></tr>
+</tbody></table></div>
+<h3 id="what-verified-does-and-does-not-mean-here">What "verified" does and does not mean here</h3>
+<p>It means: the paper exists, the ID resolves, the v1 date matches, and the title and first author on the page match the record. It does <strong>not</strong> mean every claim about every mechanism was checked against the full text. Where a specific claim <em>was</em> checked against full text — the LightningLM numbers, the Vaswani learned-PE quote, the DroPE abstract — the section or the corrections above say so explicitly. Where it was not, treat the description as a careful reading of the abstract.</p>
+<h2 id="sources-for-every-date-used-in-the-chronology">Sources for every date used in the chronology</h2>
+<p>All dates are the arXiv <code>v1</code> submission date or the official release/blog date, not a later conference/camera-ready date, unless noted otherwise. Every date below was checked directly against the primary source — not recalled from a language model's memory — before it was used in the app.</p>
+<div class="table-wrap"><table><thead><tr><th>Order</th><th>Mechanism</th><th>Source</th><th>Date</th></tr></thead><tbody>
+<tr><td>baseline</td><td>Scaled dot-product attention</td><td>Vaswani et al., "Attention Is All You Need," <a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">arXiv:1706.03762</a></td><td>Jun 2017</td></tr>
+<tr><td>1</td><td>Sinusoidal positional encoding</td><td>Same paper as above</td><td>Jun 2017</td></tr>
+<tr><td>2</td><td>Absolute learned positional embeddings</td><td>Radford et al. (OpenAI), "Improving Language Understanding by Generative Pre-Training" (GPT-1), <a href="https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf" target="_blank" rel="noopener">PDF</a>; adopted by BERT, Devlin et al., <a href="https://arxiv.org/abs/1810.04805" target="_blank" rel="noopener">arXiv:1810.04805</a>; footnote — Gehring et al., <a href="https://arxiv.org/abs/1705.03122" target="_blank" rel="noopener">arXiv:1705.03122</a> predates both by roughly a year in a non-attention (conv seq2seq) architecture</td><td>Jun 2018 (footnote: May 2017)</td></tr>
+<tr><td>3</td><td>Sparse Transformers</td><td>Child, Gray, Radford, Sutskever (OpenAI), "Generating Long Sequences with Sparse Transformers," <a href="https://arxiv.org/abs/1904.10509" target="_blank" rel="noopener">arXiv:1904.10509</a></td><td>Apr 2019</td></tr>
+<tr><td>4</td><td>Multi-Query Attention (MQA)</td><td>Shazeer (Google), "Fast Transformer Decoding: One Write-Head is All You Need," <a href="https://arxiv.org/abs/1911.02150" target="_blank" rel="noopener">arXiv:1911.02150</a></td><td>Nov 2019</td></tr>
+<tr><td>5</td><td>Sliding window attention (origin)</td><td>Beltagy, Peters, Cohan (AI2), "Longformer: The Long-Document Transformer," <a href="https://arxiv.org/abs/2004.05150" target="_blank" rel="noopener">arXiv:2004.05150</a></td><td>Apr 2020</td></tr>
+<tr><td>6</td><td>Linear attention</td><td>Katharopoulos, Vyas, Pappas, Fleuret, "Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention," <a href="https://arxiv.org/abs/2006.16236" target="_blank" rel="noopener">arXiv:2006.16236</a></td><td>Jun 2020</td></tr>
+<tr><td>7</td><td>The delta rule (origin)</td><td>Schlag, Irie, Schmidhuber, "Linear Transformers Are Secretly Fast Weight Programmers," <a href="https://arxiv.org/abs/2102.11174" target="_blank" rel="noopener">arXiv:2102.11174</a></td><td>Feb 2021</td></tr>
+<tr><td>8</td><td>RoPE</td><td>Su, Lu, Pan, Murtadha, Wen, Liu, "RoFormer: Enhanced Transformer with Rotary Position Embedding," <a href="https://arxiv.org/abs/2104.09864" target="_blank" rel="noopener">arXiv:2104.09864</a></td><td>Apr 2021</td></tr>
+<tr><td>9</td><td>ALiBi</td><td>Press, Smith, Lewis, "Train Short, Test Long: Attention with Linear Biases Enables Input Length Extrapolation," <a href="https://arxiv.org/abs/2108.12409" target="_blank" rel="noopener">arXiv:2108.12409</a></td><td>Aug 2021</td></tr>
+<tr><td>10</td><td>Grouped-Query Attention (GQA)</td><td>Ainslie, Lee-Thorp, de Jong, Zemlyanskiy, Lebrón, Sanghai (Google Research), "GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints," <a href="https://arxiv.org/abs/2305.13245" target="_blank" rel="noopener">arXiv:2305.13245</a></td><td>May 2023</td></tr>
+<tr><td>11</td><td>Position Interpolation</td><td>Chen, Wong, Chen, Tian (Meta), "Extending Context Window of Large Language Models via Positional Interpolation," <a href="https://arxiv.org/abs/2306.15595" target="_blank" rel="noopener">arXiv:2306.15595</a></td><td>Jun 2023</td></tr>
+<tr><td>12</td><td>NTK-aware RoPE scaling</td><td>u/bloc97, r/LocalLLaMA community post (not peer-reviewed); related independent work by kaiokendev the same month</td><td>~Jun 30, 2023 (approximate — see note below)</td></tr>
+<tr><td>13</td><td>YaRN</td><td>Peng, Quesnelle, Fan, Shippole, "YaRN: Efficient Context Window Extension of Large Language Models," <a href="https://arxiv.org/abs/2309.00071" target="_blank" rel="noopener">arXiv:2309.00071</a></td><td>Aug 2023</td></tr>
+<tr><td>14</td><td>Sliding window attention (decoder + KV-cache application)</td><td>Mistral AI, <a href="https://mistral.ai/news/announcing-mistral-7b/" target="_blank" rel="noopener">official blog</a>; Jiang et al., "Mistral 7B," <a href="https://arxiv.org/abs/2310.06825" target="_blank" rel="noopener">arXiv:2310.06825</a></td><td>Sep 2023 (blog) / Oct 2023 (paper)</td></tr>
+<tr><td>15</td><td>Attention sinks / StreamingLLM</td><td>Xiao, Tian, Chen, Han, Lewis, "Efficient Streaming Language Models with Attention Sinks," <a href="https://arxiv.org/abs/2309.17453" target="_blank" rel="noopener">arXiv:2309.17453</a></td><td>Sep 2023</td></tr>
+<tr><td>16</td><td>Multi-head Latent Attention (MLA)</td><td>DeepSeek-AI, "DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model," <a href="https://arxiv.org/abs/2405.04434" target="_blank" rel="noopener">arXiv:2405.04434</a></td><td>May 2024</td></tr>
+<tr><td>17</td><td>DeltaNet (parallel-training algorithm for the delta rule)</td><td>Yang, Wang, Zhang, Shen, Kim, "Parallelizing Linear Transformers with the Delta Rule over Sequence Length," <a href="https://arxiv.org/abs/2406.06484" target="_blank" rel="noopener">arXiv:2406.06484</a></td><td>Jun 2024</td></tr>
+<tr><td>18</td><td>Gated DeltaNet</td><td>Yang, Kautz, Hatamizadeh (NVIDIA), "Gated Delta Networks: Improving Mamba2 with Delta Rule," <a href="https://arxiv.org/abs/2412.06464" target="_blank" rel="noopener">arXiv:2412.06464</a></td><td>Dec 2024</td></tr>
+<tr><td>19</td><td>Native Sparse Attention (NSA)</td><td>DeepSeek-AI, Peking University, University of Washington, "Native Sparse Attention: Hardware-Aligned and Natively Trainable Sparse Attention," <a href="https://arxiv.org/abs/2502.11089" target="_blank" rel="noopener">arXiv:2502.11089</a></td><td>Feb 2025</td></tr>
+<tr><td>20</td><td>DeepSeek Sparse Attention (DSA)</td><td>DeepSeek-AI, <a href="https://github.com/deepseek-ai/DeepSeek-V3.2-Exp" target="_blank" rel="noopener">DeepSeek-V3.2-Exp release</a></td><td>Sep 2025</td></tr>
+<tr><td>21</td><td>DroPE</td><td>Gelberg, Eguchi, Akiba, Cetin (Sakana AI), "DroPE: Extending the Context of Pretrained LLMs by Dropping Their Positional Embeddings," <a href="https://arxiv.org/abs/2512.12167" target="_blank" rel="noopener">arXiv:2512.12167</a></td><td>Dec 2025</td></tr>
+<tr><td>22</td><td>LightningLM 0.1V (case study)</td><td>Shravan (The School of AI), "Reversible Foundations: Training a 120B Sparse MoE through State-Preserving Scaling," <a href="https://arxiv.org/abs/2606.07404" target="_blank" rel="noopener">arXiv:2606.07404</a></td><td>Jun 2026</td></tr>
+</tbody></table></div>
+<h2 id="corrections-found-by-checking-against-primary-sources">Corrections found by checking against primary sources</h2>
+<p>The brief said to check every date against the actual paper and not to accept anything an agent asserted confidently. Doing that turned up six errors — five of them in this app's own earlier draft of this page, one in material widely repeated about LightningLM. Each was verified by fetching the primary source directly, not by asking a model.</p>
+<h3 id="1-numbers-attributed-to-a-real-paper-that-are-not-in-it-the-worst-one">1. Numbers attributed to a real paper that are not in it — the worst one</h3>
+<p>An earlier version of the LightningLM widget drew two bars captioned <em>"interpolated between LightningLM 0.1V's two reported points (1/8 G → 8/8 G: 8.0× cache, ~1.41× compute)."</em></p>
+<p>I fetched the full text of <a href="https://arxiv.org/abs/2606.07404" target="_blank" rel="noopener">arXiv:2606.07404</a> and searched it:</p>
+<div class="table-wrap"><table><thead><tr><th>String</th><th>Hits in the paper</th></tr></thead><tbody>
+<tr><td><code>1.41</code></td><td>0</td></tr>
+<tr><td><code>8.0×</code> / <code>8.0x</code></td><td>0</td></tr>
+<tr><td><code>KV cache</code></td><td>0</td></tr>
+</tbody></table></div>
+<p>Worse than absent — contradicted. The paper's Table 5 fixes the D:G ratio at 3:1 for every stage it trains (6 D : 2 G at eight layers, 15 D : 5 G at twenty) and never sweeps it. Neither endpoint of that widget was ever trained or measured. The word <em>"reported"</em> in the caption made the false attribution explicit, on a real, citable paper by a named real person.</p>
+<p>The widget now shows only what is derivable — if only G layers hold a cache, cache share is <code>G ÷ 8</code> — labelled as this page's arithmetic, attributed to nobody.</p>
+<h3 id="2-the-8k-256k-32-figure-is-not-in-the-paper">2. The "8K → 256K, 32×" figure is not in the paper</h3>
+<p>This figure is widely attributed to LightningLM. It is not in the paper. Searching the full text returns zero hits for <code>256K</code> and zero for <code>32×</code>. The paper states the opposite outright:</p>
+<blockquote>"The production models here were trained and evaluated at 4K and 8K, the longer reaches were not tested in this work."</blockquote>
+<p>The 8× and 80× extraction factors it <em>does</em> cite belong to Gelberg et al. 2025 (the DroPE authors), which from an 8K base would be roughly 64K and 640K — neither of which is 256K. The earlier draft of this app flagged the figure as "could not be independently confirmed," which was too soft: the paper does not fail to confirm it, it disclaims it.</p>
+<h3 id="3-learned-positional-embeddings-were-not-a-2018-fix-for-a-2017-problem">3. Learned positional embeddings were not a 2018 fix for a 2017 problem</h3>
+<p>The app framed absolute learned PE as GPT-1 (Jun 2018) solving a limitation of sinusoidal encoding. That causal chain did not happen. Both options are in the 2017 Transformer paper, tested against each other. From <a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">arXiv:1706.03762</a> §3.5, verified verbatim:</p>
+<blockquote>"We also experimented with using learned positional embeddings instead, and found that the two versions produced nearly identical results (see Table 3 row (E))."</blockquote>
+<p>They chose sinusoidal on a hypothesis — <em>"because it may allow the model to extrapolate to sequence lengths longer than the ones encountered during training"</em> — not on a measurement. The section now says what actually happened: two equal-scoring options, and the field picked the pragmatic one. The learned-table construction is also older than the app implied — Gehring et al., <a href="https://arxiv.org/abs/1611.02344" target="_blank" rel="noopener">arXiv:1611.02344</a>, Nov 2016, predating the Transformer entirely.</p>
+<h3 id="4-dsa-selects-tokens-not-blocks">4. DSA selects tokens, not blocks</h3>
+<p>The app described DeepSeek Sparse Attention as ranking and selecting <em>blocks</em>, which erases the one thing distinguishing it from NSA. V3.2-Exp's lightning indexer scores every preceding <em>token</em> and the selector keeps the top-k individual tokens (k = 2,048). NSA selects blocks; DSA selects tokens. Corrected in both the prose and the widget.</p>
+<h3 id="5-drope-s-title-and-a-missing-ancestor">5. DroPE's title, and a missing ancestor</h3>
+<p>The arXiv title is <em>"Extending the Context of Pretrained LLMs by Dropping Their Positional Embeddings"</em> — there is no <code>DroPE:</code> prefix. "DroPE" is a backronym coined inside the abstract.</p>
+<p>More substantively, the app presented "is the rotation worth keeping at all?" as a question first asked in 2025. It was not. Haviv et al. asked it in <a href="https://arxiv.org/abs/2203.16634" target="_blank" rel="noopener">Mar 2022</a> and Kazemnejad et al. answered it at NeurIPS 2023 (<a href="https://arxiv.org/abs/2305.19466" target="_blank" rel="noopener">arXiv:2305.19466</a>), finding that NoPE <em>beat</em> ALiBi, RoPE and T5-relative on length generalization — the exact axis this app plots. DroPE's own paper cites both. NoPE is now a section of its own, and DroPE is framed as the fix for NoPE's real weakness rather than as an idea from nowhere.</p>
+<h3 id="6-arithmetic-errors-in-worked-examples">6. Arithmetic errors in worked examples</h3>
+<p>Recomputed by hand; all four were wrong.</p>
+<div class="table-wrap"><table><thead><tr><th>Where</th><th>Was</th><th>Correct</th></tr></thead><tbody>
+<tr><td>DroPE, <code>80 mod 2π</code></td><td>5.13</td><td><strong>4.602</strong></td></tr>
+<tr><td>DroPE, <code>400 mod 2π</code></td><td>0.35</td><td><strong>4.159</strong></td></tr>
+<tr><td>YaRN, <code>softmax([4,2,1,.5,0,0,0,0])</code> top weight</td><td>0.83</td><td><strong>0.776</strong></td></tr>
+<tr><td>YaRN, same after ÷0.5 temperature</td><td>0.68</td><td><strong>0.660</strong></td></tr>
+<tr><td>DSA, ranking share of cost</td><td>"6% of the remaining bill"</td><td><strong>33%</strong> of the new bill (6% of the <em>dense</em> bill)</td></tr>
+</tbody></table></div>
+<p>The DroPE example's punchline depended on <code>400 mod 2π</code> being 0.35 so that the same angle recurred at position 35. It does not, so that coincidence never existed; the example now uses the real recurrence at position ~416.</p>
+<h3 id="also-removed-invented-quality-numbers">Also removed: invented "quality" numbers</h3>
+<p>The three RoPE-scaling widgets carried an illustrative quality meter, and the YaRN readout told the reader to <em>"compare the illustrative quality bars — that side-by-side gap is the whole point of this three-part story."</em> That instructed the reader to draw the section's main conclusion from three numbers this page made up. The meter is gone. The YaRN curve was also wrong — it used <code>1/(1 + (s−1)·d^1.6)</code>, the NTK curve with an invented exponent — and now implements the published NTK-by-parts rule, keyed on each dimension's wavelength relative to the trained context.</p>
+<h2 id="mechanisms-beyond-the-usual-list">Mechanisms beyond the usual list</h2>
+<p>Each was held to the same standard as the rest of the timeline: v1 date fetched from the arXiv API, title and author list verified, and a stated motivation / mechanism / advantage / cost / timeline slot.</p>
+<div class="table-wrap"><table><thead><tr><th>Order</th><th>Mechanism</th><th>Source</th><th>v1 date (verified)</th><th>Why it belongs</th></tr></thead><tbody>
+<tr><td>02</td><td>Relative position representations</td><td>Shaw, Uszkoreit, Vaswani — <a href="https://arxiv.org/abs/1803.02155" target="_blank" rel="noopener">arXiv:1803.02155</a>; refined by Transformer-XL <a href="https://arxiv.org/abs/1901.02860" target="_blank" rel="noopener">arXiv:1901.02860</a>, simplified by T5 <a href="https://arxiv.org/abs/1910.10683" target="_blank" rel="noopener">arXiv:1910.10683</a></td><td>6 Mar 2018</td><td>RoPE and ALiBi are both relative schemes, and without this the timeline gives them no ancestor. ALiBi in particular <em>is</em> T5's scalar logit bias with the learned value replaced by a fixed slope — unreadable as an invention out of nowhere.</td></tr>
+<tr><td>11</td><td>FlashAttention</td><td>Dao, Fu, Ermon, Rudra, Ré — <a href="https://arxiv.org/abs/2205.14135" target="_blank" rel="noopener">arXiv:2205.14135</a></td><td>27 May 2022</td><td>The largest gap in the original chronology: 21 months with nothing in it. It is also the page's one counterexample — exact attention made dramatically cheaper at zero quality cost — which reframes every approximation around it. Much of the "quadratic cost" being approximated away was memory traffic, and that part had an exact answer.</td></tr>
+<tr><td>13</td><td>NoPE</td><td>Kazemnejad, Padhi, Natesan Ramamurthy, Das, Reddy — <a href="https://arxiv.org/abs/2305.19466" target="_blank" rel="noopener">arXiv:2305.19466</a>; earlier evidence Haviv et al. <a href="https://arxiv.org/abs/2203.16634" target="_blank" rel="noopener">arXiv:2203.16634</a></td><td>31 May 2023</td><td>The control condition for six sections of position engineering, and DroPE's direct ancestor — cited in DroPE's own paper.</td></tr>
+<tr><td>20</td><td>Mamba-2</td><td>Dao, Gu — <a href="https://arxiv.org/abs/2405.21060" target="_blank" rel="noopener">arXiv:2405.21060</a>; predecessor Mamba <a href="https://arxiv.org/abs/2312.00752" target="_blank" rel="noopener">arXiv:2312.00752</a></td><td>31 May 2024</td><td>Gated DeltaNet's literal title is <em>"Improving Mamba2 with Delta Rule"</em>. Without this section that title cannot be read, and the convergence of the state-space and linear-attention branches is invisible.</td></tr>
+</tbody></table></div>
+<h2 id="notes-on-the-harder-to-source-claims">Notes on the harder-to-source claims</h2>
+<ul>
+<li><strong>NTK-aware scaling's exact date</strong>: the community post that introduced this is on Reddit (r/LocalLLaMA, user bloc97). Reddit's own post timestamp wasn't directly fetchable during research; the ~June 30, 2023 date is corroborated by secondary sources (a GitHub archive of ML paper notes, a Hugging Face Transformers PR referencing it, and an EleutherAI blog post), not confirmed first-hand from Reddit's metadata. Treated as approximate throughout the app.</li>
+<li><strong>The delta rule vs. "DeltaNet"</strong>: these are commonly conflated. The delta rule itself originates with Schlag, Irie, and Schmidhuber (Feb 2021). "DeltaNet" — the name most people actually mean today — comes from Yang et al.'s June 2024 paper, which is a parallel-training algorithm for that same recurrence, not the origin of the idea. Both get their own timeline entry above so the correction is visible, not just asserted.</li>
+<li><strong>Sliding window attention has two distinct contributors</strong>: Longformer (Beltagy et al., 2020) originated the mechanism for encoder-style long-document tasks with designated global tokens. Mistral 7B (2023) applied the same core idea inside causal, KV-cached decoder-only generation with a rotating buffer. Both get separate entries, cross-referenced.</li>
+<li><strong>MLA vs. GQA/MQA</strong>: confirmed directly against the DeepSeek-V2 paper text. MLA performs joint low-rank compression of keys and values into one shared latent, reconstructed at attention time — a different mechanism from GQA/MQA's "fewer stored copies," not a rebrand of it. The paper itself states GQA/MQA underperform full MHA while MLA does not.</li>
+<li><strong>DroPE and "LightningLM V4"</strong>: both are real and independently verifiable, but the naming is commonly muddled. DroPE originates from Sakana AI (Dec 2025), not from LightningLM's authors. "LightningLM" is a 120B-parameter sparse MoE from The School of AI — its version string is <strong>0.1V</strong>, not "V4"; "V4" names the training programme, not a model version. The DDDGDDDG layer schedule (§3.1/Table 1) and the "Memory Stream" cross-chunk mechanism (§3.2) are confirmed in the paper; DroPE is confirmed as applied to it (§5.3), but as a downstream application of Sakana's technique, not something invented in-house.</li>
+</ul>
+<h2 id="illustrative-vs-measured-numbers">Illustrative vs. measured numbers</h2>
+<p>Almost every widget now computes from the published rule for its mechanism, or from arithmetic the reader can redo by hand. Three illustrative formulas remain, each labelled as such on the canvas: DroPE's quality-vs-length curves, and the two shapes in the RoPE family that show <em>direction</em> rather than measured values.</p>
+<p>The RoPE-scaling "quality" meters and the LightningLM cache/compute multipliers were removed outright — see the corrections above; the first were invented numbers the page told readers to draw a conclusion from, and the second were invented numbers attributed to a real paper.</p>
+<p>The KV-cache calculator computes an exact, checkable formula: <code>bytes = 2 × layers × kv_heads × head_dim × context × batch × bytes_per_number</code>. Its defaults (48 layers, 8 KV heads, head_dim 128, bf16, 32,768-token context) give ≈6.44 GB for one user and ≈51.54 GB at 8 concurrent users — worked through by hand in the section itself.</p>
+<h2 id="every-section-has-a-worked-example">Every section has a worked example</h2>
+<p>Each of the 24 sections carries a short hand-computable dry run in the same <strong>Given → numbered steps → Answer</strong> shape, using small numbers you can check on paper. They are there so the mechanism is a calculation you can follow, not a claim you have to accept: one query attending over two keys, the exact bytes MQA saves per token, the arithmetic that shows linear attention's regrouping trick giving the same answer twice, the 51.54 GB the KV-cache formula lands on.</p>
+<h2 id="charts-axes-and-one-canvas-gotcha">Charts, axes, and one canvas gotcha</h2>
+<p>Every plot goes through <code>chart()</code> in <code>js/helpers.js</code>, which draws the axis lines, ticks, tick labels and rotated axis titles and hands back <code>px(v)</code> / <code>py(v)</code> mappers, so widgets work in data units and every chart is labelled the same way. <code>legend()</code>, <code>caption()</code> and <code>tokenAxis()</code> cover the rest.</p>
+<p><strong>The gotcha, worth knowing before editing any widget:</strong> canvas parses <code>ctx.font</code> with the CSS font shorthand grammar, and that grammar does <strong>not</strong> resolve custom properties. So</p>
+<pre><code>ctx.font = "12px var(--mono), monospace";   // invalid -&gt; silently ignored</code></pre>
+<p>leaves the font at whatever was last valid — in practice <code>10px sans-serif</code> for the whole page. Every size and family choice written that way is a no-op. Use the <code>font(size, weight)</code> helper instead, which resolves <code>--mono</code> once and builds a real font string.</p>
+<p>Canvases also carry <code>min-width: 640px</code> inside an <code>overflow-x: auto</code> wrapper, so on narrow screens they scroll at a readable size rather than squashing axis labels into the gutter.</p>
+<h2 id="structure">Structure</h2>
+<pre><code>index.html            single scrolling page, one section per mechanism, chronological
+styles.css            shared visual system (dark/light aware)
+data/timeline.json    citation reference data — kept alongside the README's source table;
+                      not fetched at runtime (the sections in index.html are the live copy)
+js/helpers.js         canvas setup, chart()/legend()/caption()/tokenAxis() primitives,
+                      font(), slider and toggle bindings, softmax
+js/nav.js             builds the left-hand timeline rail and scroll-spy highlighting
+js/main.js            wires every widget to its container on page load
+js/widgets/*.js       one module per interactive widget, several reused across sections
+                      with different parameters (head-sharing for MQA+GQA, sliding-window
+                      for Longformer+Mistral, delta-rule for delta-rule-origin+Gated DeltaNet,
+                      rope-scaling for PI+NTK+YaRN, top-k for NSA+DSA — with NSA additionally
+                      showing its three parallel branches). alibi.js, drope.js, and
+                      delta-parallel.js are each dedicated to one section — ALiBi and DroPE had
+                      no widget at all in the first pass, and DeltaNet's parallel-training
+                      section originally reused delta-rule.js, which showed the correction math
+                      again instead of the actual point of that paper (training in parallel).</code></pre>
+</div>
+</body>
+</html>

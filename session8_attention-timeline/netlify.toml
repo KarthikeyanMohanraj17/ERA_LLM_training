@@ -1,0 +1,28 @@
+# Static site, no build step: Netlify publishes this folder as-is.
+[build]
+  publish = "."
+  command = ""
+
+# The HTML is hand-edited and the asset filenames are not content-hashed, so a
+# long cache on index.html would serve a stale page after every deploy.
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Same reason, shorter leash: js/css change without their names changing.
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "public, max-age=300"
+
+[[headers]]
+  for = "/styles.css"
+  [headers.values]
+    Cache-Control = "public, max-age=300"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
