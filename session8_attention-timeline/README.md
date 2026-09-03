@@ -331,8 +331,11 @@ screens they scroll at a readable size rather than squashing axis labels into th
 ```
 index.html            single scrolling page, one section per mechanism, chronological
 styles.css            shared visual system (dark/light aware)
-data/timeline.json    citation reference data — kept alongside the README's source table;
-                      not fetched at runtime (the sections in index.html are the live copy)
+sources.html          this README, rendered for the live site (generated — do not hand-edit)
+build-sources.py      regenerates sources.html from README.md
+netlify.toml          publish dir and cache headers
+_headers              the same headers again, for drag-and-drop deploys, which ignore netlify.toml
+404.html              not-found page
 js/helpers.js         canvas setup, chart()/legend()/caption()/tokenAxis() primitives,
                       font(), slider and toggle bindings, softmax
 js/nav.js             builds the left-hand timeline rail and scroll-spy highlighting
