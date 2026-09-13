@@ -1,0 +1,86 @@
+{
+  "world": 4,
+  "steps": 15,
+  "probe": {
+    "ok": true,
+    "detail": "gloo has reduce_scatter_tensor and all_gather_into_tensor"
+  },
+  "ddp": [
+    6.752833843231201,
+    6.812900066375732,
+    6.718442916870117,
+    6.753281593322754,
+    6.732571125030518,
+    6.616576194763184,
+    6.400996208190918,
+    6.683109760284424,
+    6.544224739074707,
+    6.630205154418945,
+    6.591952323913574,
+    6.796088218688965,
+    6.626218318939209,
+    6.45742130279541,
+    6.586161136627197
+  ],
+  "fsdp": [
+    6.527999401092529,
+    6.6411356925964355,
+    6.626408100128174,
+    6.812755584716797,
+    6.798189640045166,
+    6.826284885406494,
+    6.5951104164123535,
+    6.626912593841553,
+    6.6062750816345215,
+    6.781463623046875,
+    6.643581390380859,
+    6.652141571044922,
+    6.557459831237793,
+    6.555856227874756,
+    6.645477771759033
+  ],
+  "fsdp_error": null,
+  "ours": {
+    "zero0": [
+      6.752833724021912,
+      6.8129003047943115,
+      6.718442797660828,
+      6.753281354904175,
+      6.732571363449097,
+      6.616576075553894,
+      6.400995969772339,
+      6.683109998703003,
+      6.544224739074707,
+      6.630204916000366,
+      6.591953158378601,
+      6.796088695526123,
+      6.62621808052063,
+      6.457420706748962,
+      6.586160778999329
+    ],
+    "zero3": [
+      6.752833724021912,
+      6.8129003047943115,
+      6.718442797660828,
+      6.753281354904175,
+      6.732571363449097,
+      6.616576075553894,
+      6.400995969772339,
+      6.683109998703003,
+      6.544224739074707,
+      6.630204916000366,
+      6.591953158378601,
+      6.796088695526123,
+      6.62621808052063,
+      6.457420706748962,
+      6.586160778999329
+    ]
+  },
+  "diagnosis": "At WORLD=1 torch DDP and torch FSDP2 agree bitwise and both match this simulator, so FSDP2's sharding and gathering work on gloo/CPU. At WORLD=4 torch's own DDP and FSDP2 disagree by the same amount our ZeRO-3 does, so the gap is on torch's side of the comparison. The cause is structural: FSDP2 registers its post-backward gradient reduce-scatter through the wrapped module's forward INPUTS, and this root module's only input is an integer token tensor with no grad, so the hook never fires and gradients are never reduced across ranks. A conventional nn.Module transformer, where each block's forward takes a float activation, does not have this problem. The cost of fixing it here would be a second, differently written model -- at which point a mismatch could be the model rather than the parallelism, which is the one thing this script exists to rule out.",
+  "compare": {
+    "ours_zero0_vs_torch_ddp": 8.344650268554688e-07,
+    "ours_zero3_vs_torch_fsdp": 0.22483432292938232,
+    "torch_ddp_vs_torch_fsdp": 0.22483444213867188,
+    "tolerance": 0.001
+  }
+}
