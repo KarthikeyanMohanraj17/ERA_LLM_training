@@ -56,8 +56,11 @@ code(r"""
 import os, sys, subprocess, time
 T_START = time.time()
 
-def _find_vzero():
-    d = os.path.abspath(os.getcwd())
+REPO   = "https://github.com/KarthikeyanMohanraj17/ERA_LLM_training.git"
+FOLDER = "session-12-distributed-training"
+
+def _find_vzero(start=None):
+    d = os.path.abspath(start or os.getcwd())
     for _ in range(4):
         if os.path.isdir(os.path.join(d, "vzero")):
             return d
@@ -65,17 +68,27 @@ def _find_vzero():
     return None
 
 root = _find_vzero()
-if root is None:                      # Colab: fetch just this session's folder
-    subprocess.run(["git", "clone", "--depth", "1", "--filter=blob:none", "--sparse",
-                    "https://github.com/KarthikeyanMohanraj17/ERA_LLM_training.git",
-                    "/content/ERA_LLM_training"], check=True)
-    subprocess.run(["git", "sparse-checkout", "set", "session-12-distributed-training"],
-                   cwd="/content/ERA_LLM_training", check=True)
-    root = "/content/ERA_LLM_training/session-12-distributed-training"
+if root is None:                       # Colab, or anywhere the repo is not already here
+    dest = "/content/ERA_LLM_training" if os.path.isdir("/content") else "./ERA_LLM_training"
+    if not os.path.isdir(dest):
+        # Try the feature branch first, then main: the branch is where this lives
+        # until the pull request is merged, and main is where it lives after.
+        for branch in (FOLDER, "main"):
+            r = subprocess.run(["git", "clone", "--depth", "1", "--branch", branch, REPO, dest],
+                               capture_output=True, text=True)
+            if r.returncode == 0:
+                print(f"cloned branch {branch!r}")
+                break
+        else:
+            raise RuntimeError(f"could not clone {REPO}")
+    root = os.path.join(dest, FOLDER)
+    if not os.path.isdir(os.path.join(root, "vzero")):
+        raise RuntimeError(f"{FOLDER}/vzero not found in {dest}")
+
 sys.path.insert(0, root)
 os.chdir(root)
 
-for pkg in ("torch", "numpy", "matplotlib"):        # preinstalled on Colab
+for pkg in ("torch", "numpy", "matplotlib"):        # all preinstalled on Colab
     try:
         __import__(pkg)
     except ImportError:
@@ -84,7 +97,7 @@ for pkg in ("torch", "numpy", "matplotlib"):        # preinstalled on Colab
 from vzero.env import configure
 ENV = configure()
 print(ENV.render())
-print(f"  vzero at      {root}/vzero")
+print(f"  working dir   {os.getcwd()}")
 """)
 
 # ------------------------------------------------------------------------ 3-6
