@@ -1,12 +1,15 @@
 # ZeRO-1, ZeRO-2 and ZeRO-3 on 32 virtual GPUs
 
-32 fake GPUs made from CPU threads. A small transformer trains on them 4 ways: normal data
+32 virtual GPUs made from CPU threads. A small transformer trains on them 4 ways: normal data
 parallel, then ZeRO stages 1, 2 and 3. Every memory and network number is **measured**, not
 estimated.
 
 **Notebook:** [`zero_32_virtual_gpus.ipynb`](zero_32_virtual_gpus.ipynb) ·
 **Numbers:** [`results/metrics.csv`](results/metrics.csv) ·
 **Repo:** https://github.com/KarthikeyanMohanraj17/ERA_LLM_training
+
+> **Notation:** **Ψ** (psi) = number of parameters in the model. **N** = number of GPUs.
+> So "16Ψ" means 16 bytes per parameter, and "16Ψ/N" means that split across N GPUs.
 
 ---
 
@@ -16,7 +19,7 @@ Train on 4 GPUs. Each gets different data, computes gradients, they average, eve
 
 The catch: **every GPU stores the whole model state.**
 
-GPT-2 XL, 1.5B params, mixed precision + Adam:
+GPT-2 XL, 1.5B parameters, mixed precision + Adam:
 
 | what | size |
 |---|---|
@@ -27,8 +30,8 @@ GPT-2 XL, 1.5B params, mixed precision + Adam:
 | Adam `v` | 6 GB |
 | **total** | **24 GB** |
 
-- That's **16 bytes per parameter**.
-- Doesn't fit on a 16 GB card. Doesn't fit before activations even exist.
+- That's **16 bytes per parameter** → written as **16Ψ**.
+- Doesn't fit on a 16 GB card. And that's before activations exist.
 - **18 of those 24 GB are identical on every GPU.** Add a 33rd GPU → still 18 GB each.
 - So data parallelism buys speed and **zero** memory.
 
@@ -46,17 +49,15 @@ Stop copying the same thing 32 times. Split it. Rebuild only when needed.
 | **ZeRO-3** | + weights | 0.5Ψ | **1.5×** |
 
 - ZeRO-3: each GPU keeps **1/32 of every weight**.
-- Needs a layer → asks the other 31 for their pieces → uses it → throws it away.
+- Needs a layer → asks the other 31 for their pieces → uses it → frees it.
 
 ---
 
-## 3. Why ZeRO-1 and ZeRO-2 are FREE
+## 3. Why ZeRO-1 and ZeRO-2 are free
 
-Most people get this wrong, including me at first.
+The natural guess: DDP sends 1 message, ZeRO-1 sends 2, so ZeRO-1 must cost more.
 
-**Wrong thinking:** DDP = 1 message, ZeRO-1 = 2 messages, so ZeRO-1 costs more.
-
-**Why it's wrong:** DDP's "one message" is already two.
+It doesn't, because **DDP's "one message" is already two.**
 
 An all-reduce is literally:
 
@@ -67,34 +68,34 @@ step 2  all-gather      -> pass slices around until everyone has all of them
 
 - ZeRO-1 does **the same two steps**.
 - Only difference: step 2 carries *updated weights* instead of *summed gradients*.
-- Same number of elements. Same bytes.
-- ZeRO-2 changes **no** message at all — it just frees gradients earlier.
+- Same number of elements → same bytes.
+- ZeRO-2 changes **no** message at all. It just frees gradients earlier.
 
-**Measured:** `2,103,040` bytes per GPU per step for ZeRO-0, ZeRO-1 **and** ZeRO-2. The same
-integer, not "about the same".
+**Measured:** `2,103,040` bytes per GPU per step for ZeRO-0, ZeRO-1 **and** ZeRO-2 — the same
+integer, not "roughly the same".
 
-> **Takeaway:** if ZeRO-2 costs what DDP costs and uses 3.66× less memory, there's no good
-> reason to run plain DDP.
+> **Takeaway:** ZeRO-2 costs what DDP costs and uses 3.66× less memory. There's no good reason
+> to run plain DDP when ZeRO-2 is available.
 
 ---
 
 ## 4. Why ZeRO-3 costs 1.5×
 
-- ZeRO-3 throws weights away after the forward pass.
+- ZeRO-3 frees weights after the forward pass.
 - Backward needs them again → **fetch twice**.
 - 3 steps instead of 2 → **exactly 1.5×**. Measured `3,154,560` bytes = `1.5000×`.
 - True for every N, not just 32.
 
-**Worth it?** Usually yes: 50% more network for 8.75× less memory than ZeRO-2.
+**Worth it?** Usually yes — 50% more network for 8.75× less memory than ZeRO-2.
 
-**And 1.5× is a setting, not a law.** Keep the weights around between forward and backward and
+**And 1.5× is a setting, not a law.** Keep the weights resident between forward and backward and
 it drops back to 1×. That's `reshard_after_forward` in PyTorch FSDP.
 
 ---
 
 ## 5. Results
 
-Model: Ψ = `269,821` params (padded to `271,360`, so `8,480` per GPU), 32 virtual GPUs.
+Model: Ψ = `269,821` parameters (padded to `271,360`, so `8,480` per GPU), 32 virtual GPUs.
 
 ### Memory and network
 
@@ -107,30 +108,41 @@ Model: Ψ = `269,821` params (padded to `271,360`, so `8,480` per GPU), 32 virtu
 
 ![memory breakdown](figures/01-memory-breakdown.png)
 
-### The catch: activations don't shard
+Each stage removes exactly the piece it claims to: Adam's state, then gradients, then weights.
 
-- ZeRO splits **weights, gradients, optimizer**. That's it.
-- Activations (values saved during forward) are untouched: `1,495,428` bytes, **identical in
-  all 4 modes and on all 32 GPUs**.
-- So model state dropped **32.00×**, but real peak memory only dropped **3.33×**.
-- Fix is activation checkpointing — a different tool, not ZeRO.
+### Important: activations don't shard
 
-### More figures
+- ZeRO splits **weights, gradients, optimizer state**. That's all.
+- Activations (values saved during the forward pass) are untouched: `1,495,428` bytes,
+  **identical in all 4 modes and on all 32 GPUs**.
+- So model state dropped **32.00×**, but real peak memory dropped only **3.33×**.
+- The fix for activations is activation checkpointing — a separate technique, not ZeRO.
 
 ![measured vs predicted](figures/02-measured-vs-analytical.png)
 ![communication](figures/03-comm-volume.png)
-![memory vs N](figures/04-memory-vs-N.png)
 
-- ZeRO-1 and ZeRO-2 **flatten out**. They have a floor (8Ψ and 4Ψ) because of what they don't
-  split. More GPUs won't help.
-- Only ZeRO-3 keeps falling. That's the real argument for stage 3.
+### Padding: small layers shard badly
+
+- Every group is padded up to a multiple of N so it divides evenly.
+- The final LayerNorm is `128` numbers. Split 32 ways with padding → `512`. **75% waste.**
+- Whole model is only 0.57% wasted, because the transformer blocks dominate — but the ratio
+  gets worse as N grows.
+- Real libraries have a setting for this (DeepSpeed's `stage3_param_persistence_threshold`
+  leaves small tensors unsharded).
 
 ![padding](figures/06-padding.png)
+
+### Scaling with more GPUs
+
+![memory vs N](figures/04-memory-vs-N.png)
+
+- ZeRO-1 and ZeRO-2 **flatten out**. They have a floor (8Ψ and 4Ψ) set by what they don't
+  split. More GPUs won't get you below it.
+- Only ZeRO-3 keeps falling. That's the real argument for stage 3.
+
 ![scaling](figures/07-scaling.png)
 
-### Biggest model that fits
-
-80 GiB per GPU, 25% held back for activations, mixed precision:
+**Biggest model that fits**, 80 GiB per GPU, 25% held back for activations, mixed precision:
 
 | N | ZeRO-0 | ZeRO-1 | ZeRO-2 | ZeRO-3 |
 |---|---|---|---|---|
@@ -139,133 +151,112 @@ Model: Ψ = `269,821` params (padded to `271,360`, so `8,480` per GPU), 32 virtu
 | 64 | 4.0B | 15.4B | 29.0B | 147.3B |
 | 512 | 4.0B | 16.0B | 31.8B | 294.5B |
 
+One term matters here that's easy to leave out: while a layer is gathered, its full weights
+*and* its gradient are live, and that **doesn't shrink with N**. Its size is set by the biggest
+group (`50,176` elements here), not by Ψ/N. Leave it out and the table claims 8 trillion
+parameters at N=2048; include it and the answer is 330 billion.
+
 ---
 
-## 6. Is it actually correct?
+## 6. Is it correct?
 
-**All 4 modes give bit-for-bit identical answers.** Not "close". `max|delta| = 0.000e+00` across
-54 tensors, and identical to a single-GPU reference too.
+**All 4 modes give bit-for-bit identical answers.** Not "close" — `max|delta| = 0.000e+00`
+across 54 tensors, and identical to a single-GPU reference too.
 
-Why that's possible:
+That's possible because of two design choices:
+
 - `all_reduce` is **built as** reduce-scatter + all-gather, so ZeRO-0 adds the same numbers in
   the same order as ZeRO-1/2/3.
-- Adam works element-by-element, so running it on a slice = running it on the whole thing and
-  looking at that slice.
+- Adam works element-by-element, so running it on a slice equals running it on the whole tensor
+  and looking at that slice.
 
 **All 32 validation checks pass.**
 
-### I broke it on purpose, 4 ways
+### Four bugs planted on purpose
+
+A test that has never failed isn't proof it can fail. So four deliberate bugs ship with the
+tests:
 
 ![loss and ablations](figures/05-loss-and-ablations.png)
 
 | Bug | Loss error | Loss still fell? | Caught by |
 |---|---|---|---|
 | correct code | **0.000e+00** | — | — |
-| `no_reduce` — never sync gradients | 1.610e-01 | ✅ yes | normal tolerance |
-| `shard_offset` — update slice off by 1 | 1.377e-01 | ✅ yes | normal tolerance |
-| `no_all_gather` — never rebuild weights | 2.045e-01 | ✅ yes | normal tolerance |
-| `sum_not_mean` — forget to divide by 32 | **5.007e-06** | ✅ yes | **only bit-exact check** |
+| `no_reduce` — never sync gradients | 1.610e-01 | yes | normal tolerance |
+| `shard_offset` — update slice off by one | 1.377e-01 | yes | normal tolerance |
+| `no_all_gather` — never rebuild weights | 2.045e-01 | yes | normal tolerance |
+| `sum_not_mean` — forget to divide by 32 | **5.007e-06** | yes | **only the bit-exact check** |
 
-> **Every broken version still trained.** "The loss went down" proves nothing.
+> **Every broken version still trained.** A falling loss curve proves nothing on its own.
 
-**Why `sum_not_mean` is nearly invisible:** Adam divides by the gradient's own size. Make all
-gradients 32× bigger and it mostly cancels. Under plain SGD this would be a 32× learning rate
-and instant blow-up.
-
----
-
-## 7. Things I got wrong
-
-**1. My memory counter double-counted.**
-A `.view()` shares memory, it isn't new memory. Counting `numel × itemsize` per tensor inflated
-everything. Fix: key on the storage address.
-
-**2. Then the fix had a worse bug.**
-Free some memory → the OS reuses the address → my counter says "already counted" → undercounts
-forever. Fix: hold a reference to the storage. Test that caught it is 4 lines with a
-`gc.collect()` in the middle.
-
-**3. Autograd won't let you free a gathered weight.**
-ZeRO-3's whole point is freeing weights after use. But PyTorch saves the weight for backward, so
-dropping your reference frees nothing. Real FSDP's trick: **resize the storage to 0 bytes**, then
-resize back and refill before backward. Saved views follow the storage.
-
-**4. That then broke autograd's version check.**
-Writing into storage whose views were saved raises *"variable needed for gradient computation was
-modified in-place"*. Fix is `torch.autograd._unsafe_preserve_version_counter` — not a hack I
-invented, FSDP2 uses it at the same spot.
-
-**5. Tiny layers shard terribly.**
-Final LayerNorm = 128 numbers. Split 32 ways with padding → `512`. **75% waste.** Whole model
-is only 0.57% wasted because blocks dominate, but the ratio gets worse as N grows. Real
-libraries have a setting for this (`stage3_param_persistence_threshold`).
-
-**6. ZeRO-3's temporary buffer nearly made my scaling table a lie.**
-While a layer is gathered, its full weights *and* gradient are live — and that **doesn't shrink
-with N**. Size is set by the biggest group (`50,176` elements here), not by Ψ/32. Ignore it and
-the table claims 8 trillion params at N=2048. With it: 330 billion. **25× overstated.**
-
-**7. Measuring cost more than the work.**
-The activation tracker fired a Python callback per saved tensor. `weakref.finalize` is ~0.3 ms
-a call. Swapping to `__del__` and tracking one rank took a step from 1595 ms → 524 ms.
+`sum_not_mean` is nearly invisible because Adam divides by the gradient's own magnitude — make
+every gradient 32× bigger and it mostly cancels out. Under plain SGD the same bug would be a 32×
+learning rate and an instant blow-up.
 
 ---
 
-## 8. What this does NOT prove
+## 7. Checked against real PyTorch
 
-- **Threads aren't GPUs.** Memory here is a software ledger, not a device measurement.
-- **There's no network.** A "collective" is a memcpy. Byte counts are real; times are not.
-- **No speed claim anywhere.** 32 threads under Python's GIL measure Python, not ZeRO. There is
-  deliberately **no timing chart** in this repo.
-- **fp32, not mixed precision.** So my ratios are the *weaker* ones. The paper's famous numbers
-  are reproduced by formula, not measured.
-- **Ψ = 269,821, not 269 billion.** 5 orders of magnitude below anything real.
-- **Only N=32 measured end to end** (except the sweep figure).
-
-**What it does prove:**
-- The formulas are right — they reproduce the ZeRO paper's Table 1 exactly (120 / 31.4 / 16.6 /
-  1.88 GB at Ψ=7.5B, and 2048 / 536 / 284 / 32 GB at 128B).
-- All 4 stages are bit-for-bit identical to a single-GPU reference.
-- Network volumes match the maths to the byte.
-- The tests can actually fail — 4 planted bugs prove it.
-
----
-
-## 9. Checked against real PyTorch
-
-`torchrun --nproc_per_node=4` on gloo, **same model code on both sides**.
+`torchrun --nproc_per_node=4` on the gloo backend, **same model code on both sides**.
 
 | | world = 1 | world = 4 |
 |---|---|---|
-| my ZeRO-0 vs real DDP | 4.768e-07 ✅ | 8.345e-07 ✅ |
-| my ZeRO-3 vs real FSDP2 | ✅ | ❌ |
+| this ZeRO-0 vs real DDP | 4.768e-07 ✅ | 8.345e-07 ✅ |
+| this ZeRO-3 vs real FSDP2 | ✅ | ❌ |
 | **real DDP vs real FSDP2** | ✅ bitwise | **❌ same gap** |
 
-- **My DDP matches PyTorch's DDP.** That one check validates the threads, the collectives, the
-  model and the data pipeline all at once.
-- FSDP2 **does** run on CPU/gloo (the "FSDP needs NCCL" advice is outdated).
-- At 4 GPUs it disagrees — but **PyTorch's own DDP and FSDP2 disagree by the same amount**, so
-  it's not my bug.
-- **Cause:** FSDP2 hooks its gradient-sync onto the model's *input*. My model's input is integer
-  token IDs, which have no gradient, so the hook never fires.
-- I left it broken and documented rather than writing a second model to make it green — a second
-  model means a mismatch could be the model instead of the parallelism.
+- **This implementation's DDP matches PyTorch's DDP.** That single check validates the threads,
+  the collectives, the model and the data pipeline all at once.
+- FSDP2 **does** run on CPU/gloo — the common advice that FSDP needs NCCL is out of date.
+- At 4 GPUs FSDP2 disagrees, but **PyTorch's own DDP and FSDP2 disagree by the same amount**, so
+  the gap is on PyTorch's side of the comparison.
+- **Reason:** FSDP2 attaches its gradient-sync hook to the wrapped model's *input*. This model's
+  input is integer token IDs, which carry no gradient, so the hook never fires. A conventionally
+  structured `nn.Module` transformer doesn't hit this.
 
-**Honest claim:** ZeRO-0 is verified against PyTorch DDP. ZeRO-1/2/3 are verified against a
-single-GPU reference and against each other, **not** against FSDP.
+**What can be claimed:** ZeRO-0 is verified against PyTorch DDP. ZeRO-1/2/3 are verified against
+a single-GPU reference and against each other, **not** against FSDP.
 
-> Note: this only checks *numbers*, not *bytes*. gloo has no real reduce-scatter — it does a
-> full all-reduce then copies out a chunk. So gloo byte counts would contradict correct maths.
+> This compares *numbers*, not *bytes*. gloo has no true reduce-scatter — it runs a full
+> all-reduce and copies out one chunk — so gloo byte counts would contradict correct maths.
 
 ---
 
-## 10. Run it
+## 8. What's measured and what isn't
 
-**Colab** — click, then Runtime → Run all. ~2 min, CPU runtime is fine:
+**Measured on this machine:**
+- per-GPU memory, broken down by weights / gradients / optimizer / activations
+- bytes moved per collective, and how many collectives per step
+- loss curves and parameter values
+
+**Calculated from formulas** (and asserted equal to the measurements where both exist):
+- the 16Ψ accounting, per-stage memory, communication volume
+- the biggest-model-that-fits table
+
+**Not claimed at all:**
+- **Speed.** 32 Python threads on 12 cores measure Python's interpreter lock, not ZeRO. There is
+  deliberately no timing chart anywhere in this repo.
+- **Real network behaviour.** A collective here is a memory copy. Byte counts are real; times
+  are not.
+
+**Scope limits:**
+- Runs in fp32, not mixed precision, so the measured ratios are the more conservative ones. The
+  paper's headline numbers are reproduced by formula.
+- Ψ = `269,821`, five orders of magnitude below a production model.
+- N = 32 is the only world size measured end to end, apart from the sweep figure.
+
+The formulas reproduce the ZeRO paper's Table 1 exactly — 120 / 31.4 / 16.6 / 1.88 GB at
+Ψ = 7.5B, and 2048 / 536 / 284 / 32 GB at 128B.
+
+---
+
+## 9. Run it
+
+**Colab** — click, then Runtime → Run all. About 2 minutes; a CPU runtime is fine:
 
 https://colab.research.google.com/github/KarthikeyanMohanraj17/ERA_LLM_training/blob/session-12-distributed-training/session-12-distributed-training/zero_32_virtual_gpus.ipynb
 
-**Local** (Python 3.12 — torch has no 3.14 wheels):
+**Local** (Python 3.12 — torch has no 3.14 wheels yet):
 
 ```bash
 git clone https://github.com/KarthikeyanMohanraj17/ERA_LLM_training.git
@@ -277,44 +268,50 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 OMP_NUM_THREADS=1 .venv/bin/torchrun --nproc_per_node=4 scripts/torch_crosscheck.py
 ```
 
-The notebook already has its outputs saved, so you can just read it.
+The notebook already has its outputs saved, so you can read it without running anything.
 
 ---
 
-## 11. Files
+## 10. Files
 
 ```
 zero_32_virtual_gpus.ipynb   the notebook, outputs included
 
 vzero/
-  vgpu.py         counts bytes. Keyed by storage address so views are free.
-                  Every memory number depends on this being right.
+  vgpu.py         counts bytes per virtual GPU, keyed by storage address so
+                  views cost nothing. Every memory number depends on this.
   fabric.py       the collectives. all_reduce is BUILT from reduce_scatter +
-                  all_gather -- that's what makes the bit-exact claims work.
+                  all_gather, which is what makes the bit-exact claims work.
                   Two versions, proven identical: a real 31-step ring, and a
-                  fast path for the runs.
-  shard.py        how Psi params become 32 slices. Padding made visible.
+                  faster path for the training runs.
+  shard.py        how Psi parameters become 32 slices, including padding.
   model.py        a transformer with no nn.Module -- with one, weights always
-                  exist and ZeRO-3 can't be shown honestly.
-  optim.py        Adam on a slice. Element-wise, which is half the bit-exact proof.
-  engine.py       the 4 modes + the single-GPU reference.
-  accounting.py   activation memory, measured not guessed.
-  analysis.py     formulas only, no measurement, so the notebook can compare.
-  validate.py     32 assertions + the 4 planted bugs.
-  report.py       figures. Deliberately contains no timing plot.
-  pool.py         worker threads. One rank crashing kills all 32 fast instead
-                  of 32 separate timeouts.
+                  exist and ZeRO-3 can't be demonstrated honestly.
+  optim.py        Adam on a slice. Element-wise, which is half the bit-exact
+                  proof.
+  engine.py       the 4 modes and the single-GPU reference.
+  accounting.py   activation memory, measured rather than estimated.
+  analysis.py     formulas only, no measurement, so the notebook can compare
+                  predicted against measured.
+  validate.py     the 32 assertions and the 4 planted bugs.
+  report.py       figures. Contains no timing plot, on purpose.
+  pool.py         worker threads. One rank crashing fails all 32 immediately
+                  instead of 32 separate timeouts.
 
 scripts/
   make_results.py      regenerates figures/ and results/
-  torch_crosscheck.py  real DDP + FSDP2 under torchrun
+  torch_crosscheck.py  real DDP and FSDP2 under torchrun
   build_notebook.py    generates the .ipynb, so code is never copy-pasted
   check_readme.py      checks every number in this file against results/
 
-tests/     15 tests, incl. "a mismatched rank must crash, not hang"
-figures/   committed, so GitHub shows them without running anything
+tests/     15 tests, including "a mismatched rank must crash, not hang"
+figures/   committed, so GitHub renders them without running anything
 results/   metrics.csv, summary.json, crosscheck-world{1,4}.json
 ```
+
+Build notes — the PyTorch behaviours this implementation had to work around, and why certain
+design choices were forced — are in
+[`IMPLEMENTATION-NOTES.md`](IMPLEMENTATION-NOTES.md).
 
 ---
 
@@ -334,7 +331,7 @@ All paper numbers were read from the papers, not recalled.
 | PyTorch DDP | [2006.15704](https://arxiv.org/abs/2006.15704) | gradient bucketing |
 | Adam | [1412.6980](https://arxiv.org/abs/1412.6980) | the optimizer, and its scale invariance |
 
-Ring all-reduce: Patarasuk & Yuan, JPDC 69(2), 2009 (no arXiv).
+Ring all-reduce: Patarasuk & Yuan, JPDC 69(2), 2009 (no arXiv entry).
 
-PyTorch internals were read from installed source at torch 2.14.0 — `ProcessGroupGloo.cpp` for
-gloo's reduce-scatter, `_fsdp_init.py` / `_fsdp_collectives.py` for FSDP2's CPU paths.
+PyTorch internals were read from the installed source at torch 2.14.0 — `ProcessGroupGloo.cpp`
+for gloo's reduce-scatter, and `_fsdp_init.py` / `_fsdp_collectives.py` for FSDP2's CPU paths.
